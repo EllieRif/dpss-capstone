@@ -1,0 +1,133 @@
+---
+title: "capstone"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+# # Setup
+
+#Libraries
+```{r}
+library(tidyverse)
+library(readr)
+library(sf)
+
+```
+
+# # Data
+```{r}
+retail_data <- read_csv("retail_data_export.csv")
+vax_data <- read_csv("county_week26_data_fixed.csv")
+store_sf <- st_read("tl_2016_us_county.shp")
+glimpse(retail_data)
+glimpse(store_sf)
+```
+# # Joins
+```{r}
+
+store_sf <- store_sf %>% mutate(GEOID = as.character(GEOID))
+
+
+store_sf <- st_transform(store_sf, 4326)
+retail_data <- st_as_sf(
+  retail_data,
+  coords = c("longitude", "latitude"),
+  crs = 4326
+)
+
+test_sum <- aggregate(retail_data$daily_visitors, by = list(retail_data$dayofmonth), mean)
+
+
+retail_sum <- retail_data %>% filter(dayofmonth>=4) %>% group_by(dayofmonth) %>% summarise(avg_traffic = mean(daily_visitors))
+
+aggregate(retail_data$daily_visitors, by = list(retail_data$dayofmonth), mean)
+
+#commit test comment
+
+
+```
+
+
+```{r}
+retail_geo <- st_join(
+  retail_data,
+  store_sf,
+  join = st_within
+)
+```
+
+
+# # Plotting
+
+# sampling
+
+```{r}
+
+retail_samp <- retail_geo %>% filter(dayofmonth >=4, dayofmonth<=28) %>% sample_frac(0.1)
+
+
+retail_samp %>% group_by(dayofmonth) %>% summarise(avg_traffic = mean(daily_visitors)) %>%  ggplot() + 
+  geom_line(mapping = aes(x = dayofmonth, y = avg_traffic)) + 
+  geom_vline(mapping = aes(xintercept = 18), color = "red")
+```
+
+
+```{r}
+retail_samp2 <- retail_geo %>% filter(dayofmonth >=4, dayofmonth<=28) %>% sample_frac(0.5)
+
+
+retail_samp2 %>% group_by(dayofmonth) %>% summarise(avg_traffic = mean(daily_visitors)) %>%  ggplot() + 
+  geom_line(mapping = aes(x = dayofmonth, y = avg_traffic)) + 
+  geom_vline(mapping = aes(xintercept = 18), color = "red")
+
+```
+
+
+```{r}
+
+state_daily_avg <- retail_samp %>% group_by(dayofmonth, STATEFP) %>% summarise(avg_traffic = mean(daily_visitors)) %>% mutate(traf_rank = factor(ntile(avg_traffic,5)))
+
+```
+
+```{r}
+state_daily_avg %>%  ggplot() + 
+  geom_line(mapping = aes(x= dayofmonth, y=avg_traffic, color = STATEFP)) + facet_wrap(~traf_rank, scales = "free_y")
+```
+```{r}
+tsamp1 <- retail_geo %>% sample_frac(0.1) %>% summarise(avg = mean(daily_visitors))
+
+tsamp2 <- retail_geo %>% sample_frac(0.1) %>% summarise(avg = mean(daily_visitors))
+
+tsamp3 <- retail_geo %>% sample_frac(0.1) %>% summarise(avg = mean(daily_visitors))
+tsamp4 <- retail_geo %>% sample_frac(0.1) %>% summarise(avg = mean(daily_visitors))
+```
+
+
+```{r}
+
+
+
+```
+
