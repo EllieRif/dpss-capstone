@@ -1,0 +1,102 @@
+---
+title: "geospatial plots"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+# # Library and Setup
+
+```{r}
+library(tidyverse)
+library(readr)
+library(sf)
+
+```
+
+
+# # Data agjustments
+
+# Factoring Risk
+
+```{r}
+vax_data <- vax_data %>% mutate(svi_fac = factor(`SVI Category`, levels = c("Very Low Vulnerability", "Low Vulnerability", "Moderate Vulnerability", "High Vulnerability", "Very High Vulnerability"), ordered = TRUE))
+```
+
+
+# # Geospatial Plots
+
+```{r}
+
+store_sf <- store_sf %>% mutate(chr_fips = paste(STATEFP, COUNTYFP, sep = ""))
+
+retail_spatial <- st_join(
+  retail_data,
+  store_sf,
+  join = st_within
+)
+
+
+
+
+vax_spatial <- left_join(store_sf, vax_data, by = c("chr_fips" = "FIPS Code" ))
+
+#retail_spatial <- retail_spatial %>% mutate(chr_fips = paste(STATEFP, COUNTYFP, sep = ""))
+
+#retail_spatial %>% filter(length(fips)==4)
+
+#retail_spatial %>% filter(str_detect(fips, "^0"))
+
+retail_spatial <- left_join(retail_spatial, vax_data, by = c("chr_fips" = "FIPS Code"))
+
+```
+
+```{r}
+ny_spatial <- retail_spatial %>% filter(STATEFP=="36")
+
+ny_vax <- vax_spatial %>% filter(STATEFP=="36")
+
+hi_spatial <- retail_spatial %>% filter(STATEFP=="15")
+
+hi_vax <- vax_spatial %>% filter(STATEFP=="15")
+```
+
+```{r}
+plot(ny_spatial["placekey"])
+
+plot(ny_vax["svi_fac"])
+
+vax_spatial %>% ggplot() + 
+  geom_sf(mapping = aes(color = svi_fac))
+
+ny_vax %>% ggplot() + 
+  geom_sf(mapping = aes(fill = svi_fac)) + 
+  geom_sf(data = ny_spatial, mapping = aes())
+
+hi_vax %>% ggplot() + 
+  geom_sf(mapping = aes(fill = svi_fac)) + 
+  geom_sf(data = hi_spatial, mapping = aes())
+```
+
