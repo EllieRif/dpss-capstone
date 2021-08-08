@@ -1,0 +1,122 @@
+---
+title: "inclusion of covid data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+case_data <- read.csv("us-counties-rolling-cases.csv")
+
+case_data$date <- ymd(case_data$date)
+
+case_data <- case_data %>% filter(date>="2021-05-01", date<="2021-05-31")
+
+
+
+```
+
+
+```{r}
+case_data <- case_data %>% separate(geoid, into = c("geoid", "fips"), sep = "-")
+case_data$geoid <- NULL
+
+case_data$dayofmonth <- day(case_data$date)
+
+retail_cases <- left_join(retail_geo, case_data, by = c("chr_fips" = "fips", "dayofmonth"))
+
+
+#cases_indicators <- retail_cases %>% select(chr_fips:deaths_avg_per_100k)
+
+
+
+```
+
+
+# # Difference Calculations
+
+#covid case difference
+
+```{r}
+#retail_cases <- retail_cases %>% group_by(placekey) %>% mutate(case_change = cases-lag(cases), caseavg_change = cases_avg-lag(cases_avg), case100k_change = cases_avg_per_100k-lag(cases_avg_per_100k))
+  
+retail_cases<- retail_cases %>% group_by(state) %>% mutate(cases_state= sum(cases_avg), cases_100k_state = sum(cases_avg_per_100k))
+
+
+retail_cases <- retail_cases %>% mutate(state_risk_group = case_when(
+    avg_100k_state>=0 & avg_100k_state<=10 ~ 1,
+    avg_100k_state>10 & avg_100k_state<=30 ~2,
+    avg_100k_state>30 & avg_100k_state<=50 ~3,
+    avg_100k_state>50 & avg_100k_state<=70 ~4,
+    avg_100k_state>70 & avg_100k_state<=100 ~ 5,
+    avg_100k_state>100 & avg_100k_state<=250 ~ 6
+    
+  ))
+#don't use TRUE ~ NA, it wont work
+
+retail_cases <- retail_cases %>% group_by(state) %>%  mutate(state_risk_fac = factor(state_risk_group, levels = (1:6), labels = c( "Nearly No Cases", "Very Low Risk", "Low Risk", "Moderate Risk", "High Risk", "Very High Risk")))
+
+
+```
+
+
+
+
+
+
+
+# # visualizations
+
+```{r}
+
+retail_cases %>% group_by(state) %>% summarise(ac = mean(cases_avg), ac100K = mean(cases_avg_per_100k), ad = mean(deaths_avg), ad100k = mean(deaths_avg_per_100k)) %>% arrange(desc(ac100K))
+
+```
+```{r}
+state_avgs <- retail_cases %>% group_by(state, dayofmonth) %>% summarise(avg_traffic = mean(daily_visitors), avg_cases_state = mean(cases_state),avg_cases_100k_state = mean(cases_100k_state))
+
+#state_avgs <- retail_cases %>% group_by(state, dayofmonth) %>% summarise(avg_traffic = mean(daily_visitors), cases_state, cases_100k_state)
+
+state_avgs <- state_avgs %>% group_by(state) %>% mutate(avg_cases = mean(avg_cases_state), avg_100k = mean(avg_cases_100k_state))
+
+state_avgs <- state_avgs %>% ungroup() %>%  mutate(case_quint = ntile(avg_100k,5))
+                                                        
+
+state_avgs %>% group_by(case_quint) %>% summarise(n=n())
+
+state_avgs %>% group_by(state) %>% summarise(n=n(), q = mean(case_quint))
+
+
+```
+
+
+```{r}
+
+state_avgs %>% ggplot() + 
+  geom_line(mapping = aes(x = dayofmonth, y = avg_traffic, color = factor(case_quint), group = state)) + facet_wrap(~factor(case_quint, levels = c(1:5), labels = c("Bottom 20%", "20th-40th Percentile", "40th-60th Percentile", "60th-80th Percentile", "Top 20%")))
+```
+
+
+# # regressions + summaries

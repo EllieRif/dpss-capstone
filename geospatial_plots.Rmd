@@ -39,11 +39,7 @@ library(sf)
 
 # # Data agjustments
 
-# Factoring Risk
 
-```{r}
-vax_data <- vax_data %>% mutate(svi_fac = factor(`SVI Category`, levels = c("Very Low Vulnerability", "Low Vulnerability", "Moderate Vulnerability", "High Vulnerability", "Very High Vulnerability"), ordered = TRUE))
-```
 
 
 # # Geospatial Plots
@@ -71,7 +67,20 @@ vax_spatial <- left_join(store_sf, vax_data, by = c("chr_fips" = "FIPS Code" ))
 
 retail_spatial <- left_join(retail_spatial, vax_data, by = c("chr_fips" = "FIPS Code"))
 
+
+
+
+
+
 ```
+
+
+# Factoring Risk
+
+```{r}
+retail_spatial <- retail_spatial %>% mutate(svi_fac = factor(`SVI Category`, levels = c("Very Low Vulnerability", "Low Vulnerability", "Moderate Vulnerability", "High Vulnerability", "Very High Vulnerability"), ordered = TRUE))
+```
+
 
 ```{r}
 ny_spatial <- retail_spatial %>% filter(STATEFP=="36")

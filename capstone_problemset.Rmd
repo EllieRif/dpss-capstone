@@ -35,6 +35,7 @@ library(readr)
 library(sf)
 
 library(broom)
+library(lubridate)
 
 ```
 
@@ -46,6 +47,7 @@ vax_data$`FIPS Code`<-as.character(vax_data$`FIPS Code`)
 vote_data <- read_csv("vote2020.csv")
 vote_data$county_fips <- as.character(vote_data$county_fips)
 store_sf <- st_read("tl_2016_us_county.shp")
+
 glimpse(retail)
 glimpse(store_sf)
 

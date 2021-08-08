@@ -1,0 +1,161 @@
+---
+title: "difference and change"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+library(tidyverse)
+library(readr)
+library(sf)
+
+library(broom)
+library(lubridate)
+```
+
+
+```{r}
+retail_indicators <- retail_vax_vote %>% select(placekey, dayofmonth, daily_visitors, chr_fips:`Percent non-Hispanic White`, per_gop:post) 
+
+retail_indicators<- left_join(retail_indicators, case_data, by = c("chr_fips" = "fips", "dayofmonth"))
+```
+
+
+# # Creating Categorical Variables
+
+```{r}
+retail_indicators <- retail_indicators %>% mutate(gop_win = ifelse(per_gop>0.5,1,0), maj_minority = ifelse(`Percent non-Hispanic White`<50, 1, 0))
+
+retail_indicators <- retail_indicators %>% mutate(svi_fac = factor(`SVI Category`, levels = c("Very Low Vulnerability", "Low Vulnerability", "Moderate Vulnerability", "High Vulnerability", "Very High Vulnerability"), ordered = TRUE), cvac_fac = factor(`CVAC Category`, levels = c("Very Low Vulnerability", "Low Vulnerability", "Moderate Vulnerability", "High Vulnerability", "Very High Vulnerability"), ordered = TRUE))
+
+
+retail_
+#retail_indicators %>% group_by(chr_fips) %>% summarise(n_walmarts = n_distinct(placekey))
+```
+# Week Grouping
+
+```{r}
+retail_indicators <- retail_indicators %>% mutate(wksfrom = case_when(
+  dayofmonth <4 ~ "More Than Two Weeks Before",
+  dayofmonth>=4 & dayofmonth<11 ~ "Two Weeks Before",
+  dayofmonth>=11 & dayofmonth<18 ~ "One Week Before",
+  dayofmonth>=18 & dayofmonth<25 ~ "One Week After",
+  dayofmonth>=25 ~ "Two Weeks After"
+  ))
+
+retail_indicators %>% group_by(wksfrom) %>% summarise(n=n())
+
+
+```
+#analysis
+
+```{r}
+t.test(retail_indicators$daily_visitors[retail_indicators$wksfrom == "Two Weeks Before"], retail_indicators$daily_visitors[retail_indicators$wksfrom == "One Week Before"])
+
+t.test(retail_indicators$daily_visitors[retail_indicators$wksfrom == "One Week Before"], retail_indicators$daily_visitors[retail_indicators$wksfrom == "One Week After"])
+
+t.test(retail_indicators$daily_visitors[retail_indicators$wksfrom == "One Week After"], retail_indicators$daily_visitors[retail_indicators$wksfrom == "Two Weeks After"])
+
+t.test(retail_indicators$daily_visitors[retail_indicators$wksfrom == "Two Weeks Before"], retail_indicators$daily_visitors[retail_indicators$wksfrom == "Two Weeks After"])
+```
+
+
+#direct change
+
+```{r}
+
+retail_indicators <-retail_indicators %>%  group_by(placekey, wksfrom) %>% mutate(wkavg = mean(daily_visitors))
+
+retail_change <- retail_indicators %>% group_by(placekey) %>%  mutate(mask_change = daily_visitors-lag(daily_visitors), wkchange = wkavg-lag(wkavg)) %>% filter(dayofmonth==18)
+
+#retail_change <- retail_change %>% group_by(wksfrom) %>% mutate(wkavg = mean(daily_visitors))
+
+#retail_change <- retail_change %>% group_by(State) %>% mutate(state_avg_change = mean(mask_change))
+
+#retail_change %>% ungroup() %>% select(State, state_avg_change) %>% mutate(dec = ntile(state_avg_change, 10))%>% group_by(State) %>% summarise(q = mean(dec))
+
+avg_dec <- retail_change %>% group_by(State) %>% summarise(state_avg_change = mean(mask_change, na.rm = TRUE)) %>% mutate(dec = ntile(state_avg_change, 10))
+
+retail_change <- left_join(retail_change, avg_dec, by = "State")
+
+summary(retail_change$mask_change)
+
+biggest_jump <- retail_change %>% filter(dec==10)
+
+biggest_drop <- retail_change %>% filter(dec == 1)
+
+middle_moves <- retail_change %>% filter(dec == 5| dec==6)
+
+
+
+
+```
+
+# # Regressions
+
+# Regressing With Change as Dependent Var
+
+```{r}
+diff_reg1 <- lm(mask_change ~ cases_avg_per_100k + gop_win + maj_minority + svi_fac + cvac_fac, data = retail_change)
+
+diff_reg1 <- tidy(diff_reg1)
+
+
+diff_reg2 <- lm(mask_change ~ cases_avg_per_100k + gop_win + maj_minority + `Social Vulnerability Index (SVI)` + `Ability to handle a COVID-19 outbreak (CVAC)`
+, data = retail_change)
+
+diff_reg2 <- tidy(diff_reg2)
+
+reg_cases <- lm(mask_change~cases_avg_per_100k, data = retail_change)
+
+reg_cases <- tidy(reg_cases)
+
+reg_cases1 <- lm(mask_change~cases_avg_per_100k + per_gop, data = retail_change)
+
+reg_cases1 <- tidy(reg_cases1)
+
+
+reg_cases2 <- lm(mask_change~cases_avg_per_100k + gop_win, data = retail_change)
+reg_cases2 <- tidy(reg_cases2)
+
+
+reg_gop <- lm(mask_change ~ per_gop, data = retail_change)
+
+reg_gop <- tidy(reg_gop)
+
+reg_gop1 <- lm(mask_change~per_gop + `Social Vulnerability Index (SVI)` + `Ability to handle a COVID-19 outbreak (CVAC)`, data = retail_change)
+
+reg_gop1 <- tidy(reg_gop1)
+
+```
+
+
+```{r}
+retail_change %>% filter(!is.na(gop_win)) %>%  ggplot() + 
+  geom_boxplot(mapping = aes(y = mask_change, fill = svi_fac)) + facet_wrap(~gop_win)
+```
+
+
