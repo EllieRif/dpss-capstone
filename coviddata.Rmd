@@ -62,7 +62,7 @@ retail_cases <- left_join(retail_geo, case_data, by = c("chr_fips" = "fips", "da
 ```{r}
 #retail_cases <- retail_cases %>% group_by(placekey) %>% mutate(case_change = cases-lag(cases), caseavg_change = cases_avg-lag(cases_avg), case100k_change = cases_avg_per_100k-lag(cases_avg_per_100k))
   
-retail_cases<- retail_cases %>% group_by(state) %>% mutate(cases_state= sum(cases_avg), cases_100k_state = sum(cases_avg_per_100k))
+retail_cases<- retail_cases %>% group_by(state) %>% mutate(cases_state= sum(cases_avg), cases_100k_state = sum(cases_avg_per_100k), avg_100k_state = mean(cases_avg_per_100k))
 
 
 retail_cases <- retail_cases %>% mutate(state_risk_group = case_when(
@@ -77,6 +77,8 @@ retail_cases <- retail_cases %>% mutate(state_risk_group = case_when(
 #don't use TRUE ~ NA, it wont work
 
 retail_cases <- retail_cases %>% group_by(state) %>%  mutate(state_risk_fac = factor(state_risk_group, levels = (1:6), labels = c( "Nearly No Cases", "Very Low Risk", "Low Risk", "Moderate Risk", "High Risk", "Very High Risk")))
+
+retail_cases %>% group_by(state) %>%  ggplot() + geom_histogram(mapping = aes(state_risk_group))
 
 
 ```
@@ -114,8 +116,12 @@ state_avgs %>% group_by(state) %>% summarise(n=n(), q = mean(case_quint))
 
 ```{r}
 
+state_avgs <- state_avgs %>% mutate(quint = factor(case_quint, levels = c(1:5), labels = c("Bottom 20%", "20th-40th Percentile", "40th-60th Percentile", "60th-80th Percentile", "Top 20%")))
+
 state_avgs %>% ggplot() + 
-  geom_line(mapping = aes(x = dayofmonth, y = avg_traffic, color = factor(case_quint), group = state)) + facet_wrap(~factor(case_quint, levels = c(1:5), labels = c("Bottom 20%", "20th-40th Percentile", "40th-60th Percentile", "60th-80th Percentile", "Top 20%")))
+  geom_line(mapping = aes(x = dayofmonth, y = avg_traffic, color = quint, group = state)) + labs(title = "Average Store Traffic in May 2021", subtitle = "Grouped by State")
+
+ggsave("Average Traffic By State.png")
 ```
 
 

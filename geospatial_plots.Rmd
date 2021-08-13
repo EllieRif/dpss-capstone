@@ -59,6 +59,10 @@ retail_spatial <- st_join(
 
 vax_spatial <- left_join(store_sf, vax_data, by = c("chr_fips" = "FIPS Code" ))
 
+
+
+case_spatial <- left_join(store_sf, case_data, by = c("chr_fips" = "fips"))
+
 #retail_spatial <- retail_spatial %>% mutate(chr_fips = paste(STATEFP, COUNTYFP, sep = ""))
 
 #retail_spatial %>% filter(length(fips)==4)
@@ -79,6 +83,37 @@ retail_spatial <- left_join(retail_spatial, vax_data, by = c("chr_fips" = "FIPS 
 
 ```{r}
 retail_spatial <- retail_spatial %>% mutate(svi_fac = factor(`SVI Category`, levels = c("Very Low Vulnerability", "Low Vulnerability", "Moderate Vulnerability", "High Vulnerability", "Very High Vulnerability"), ordered = TRUE))
+
+vax_spatial <- vax_spatial %>%  mutate(svi_fac = factor(`SVI Category`, levels = c("Very Low Vulnerability", "Low Vulnerability", "Moderate Vulnerability", "High Vulnerability", "Very High Vulnerability"), ordered = TRUE))
+```
+# Factoring risk for covid
+
+```{r}
+case_spatial <- case_spatial %>% mutate(covid_case_risk = case_when(
+    cases_avg_per_100k>=0 & cases_avg_per_100k<=10 ~ 1,
+    cases_avg_per_100k>10 & cases_avg_per_100k<=30 ~2,
+    cases_avg_per_100k>30 & cases_avg_per_100k<=50 ~3,
+    cases_avg_per_100k>50 & cases_avg_per_100k<=70 ~4,
+    cases_avg_per_100k>70 & cases_avg_per_100k<=100 ~ 5,
+    cases_avg_per_100k>100 & cases_avg_per_100k<=250 ~ 6
+    
+  ))
+
+case_spatial <- case_spatial %>% mutate(covid_risk_fac = factor(covid_case_risk, levels = (1:6), labels = c( "Nearly No Cases", "Very Low Risk", "Low Risk", "Moderate Risk", "High Risk", "Very High Risk"), ordered = TRUE))
+
+case_spatial <- case_spatial %>% group_by(COUNTYFP) %>% mutate(county_risk_avg =mean(cases_avg_per_100k))
+
+case_spatial <- case_spatial %>% mutate(county_case_fac = case_when(
+    county_risk_avg>=0 & county_risk_avg<=10 ~ 1,
+    county_risk_avg>10 & county_risk_avg<=30 ~2,
+    county_risk_avg>30 & county_risk_avg<=50 ~3,
+    county_risk_avg>50 & county_risk_avg<=70 ~4,
+    county_risk_avg>70 & county_risk_avg<=100 ~ 5,
+    county_risk_avg>100 & county_risk_avg<=250 ~ 6
+    
+  ))
+
+case_spatial <- case_spatial %>% mutate(county_risk_fac = factor(county_case_fac, levels = (1:6), labels = c( "Nearly No Cases", "Very Low Risk", "Low Risk", "Moderate Risk", "High Risk", "Very High Risk"), ordered = TRUE))
 ```
 
 
@@ -86,16 +121,34 @@ retail_spatial <- retail_spatial %>% mutate(svi_fac = factor(`SVI Category`, lev
 ny_spatial <- retail_spatial %>% filter(STATEFP=="36")
 
 ny_vax <- vax_spatial %>% filter(STATEFP=="36")
+ny_case <- case_spatial %>% filter(STATEFP == "36")
 
 hi_spatial <- retail_spatial %>% filter(STATEFP=="15")
 
 hi_vax <- vax_spatial %>% filter(STATEFP=="15")
+
+day_drop_states <- unique(biggest_drop_day$chr_fips)
+
+wk_drop_states <- unique(biggest_drop_wk$chr_fips)
+
+
+day_jump_states <- unique(biggest_jump_day$chr_fips)
+
+wk_jump_states <- unique(biggest_jump_wk$chr_fips)
+
+biggest_drop %>% select(state, chr_fips)
+
 ```
+
 
 ```{r}
 plot(ny_spatial["placekey"])
 
+plot(case_spatial["county_risk_avg"])
+
 plot(ny_vax["svi_fac"])
+
+plot(ny_case["covid_risk_fac"])
 
 vax_spatial %>% ggplot() + 
   geom_sf(mapping = aes(color = svi_fac))
@@ -107,5 +160,75 @@ ny_vax %>% ggplot() +
 hi_vax %>% ggplot() + 
   geom_sf(mapping = aes(fill = svi_fac)) + 
   geom_sf(data = hi_spatial, mapping = aes())
+
+case_spatial %>% group_by(county) %>%  select(date, county, state, county_risk_fac, county_risk_avg) %>%  arrange(desc(county_risk_fac))
+```
+# # States With WoW Jump
+
+```{r}
+wk_jump_vax<- vax_spatial %>% filter(chr_fips %in% wk_jump_states)
+
+wk_jump_spatial <- retail_spatial %>% filter(chr_fips %in% wk_jump_states, dayofmonth==18)
+
+wk_jump_spatial <- left_join(wk_jump_spatial, biggest_jump_wk, by = "placekey")
+
+mich_point <- wk_jump_spatial %>% filter(state == "Michigan") %>%  geom_sf(mapping = aes(color = wkchange))
+
+mich_hes <- vax_spatial %>% filter(State == "MICHIGAN") %>% ggplot() +
+  geom_sf(mapping = aes(fill = `Estimated hesitant`)) + scale_fill_distiller(palette = "OrRd")
+
+
+mich_point
+mich_hes + mich_point
+```
+
+
+```{r}
+mont_point <- wk_jump_spatial %>% filter(state == "Montana") %>%  geom_sf(mapping = aes(color = wkchange))
+
+mont_hes <- vax_spatial %>% filter(State == "MONTANA") %>% ggplot() +
+  geom_sf(mapping = aes(fill = `Estimated hesitant`)) + scale_fill_distiller(palette = "OrRd")
+
+mont_hes+mont_point
+```
+
+
+```{r}
+kent_point <- wk_jump_spatial %>% filter(state == "Kentucky") %>%  geom_sf(mapping = aes(color = wkchange))
+
+kent_hes <- vax_spatial %>% filter(State == "KENTUCKY") %>% ggplot() +
+  geom_sf(mapping = aes(fill = `Estimated hesitant`)) + scale_fill_distiller(palette = "OrRd")
+
+kent_hes+kent_point
+```
+# # WoW Drop States
+
+```{r}
+
+wk_drop_spatial <- retail_spatial %>% filter(chr_fips %in% wk_drop_states, dayofmonth==18)
+
+wk_drop_spatial <- left_join(wk_drop_spatial, biggest_drop_wk, by = "placekey")
+
+unique(biggest_drop_wk$State)
+
+
+```
+
+
+```{r}
+maine_point <- wk_drop_spatial %>% filter(STATEFP == "M23") %>%  geom_sf(mapping = aes(color = wkchange))
+
+maine_hes <- vax_spatial %>% filter(State == "MAINE") %>% ggplot() +
+  geom_sf(mapping = aes(fill = `Estimated hesitant`)) + scale_fill_distiller(palette = "OrRd")
+
+maine_hes+maine_point
+ggplot() + maine_point
+
+
+retail_spatial %>% filter(STATEFP == "23")
+
+wk_drop_spatial %>% filter(state=="Maine")
+
+retail_geo %>% filter(state == "Maine")
 ```
 

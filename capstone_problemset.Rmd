@@ -95,7 +95,9 @@ retail_geo$geometry <- NULL
 
 ```{r}
 retail_geo %>% group_by(dayofmonth) %>% summarise(avg_traffic=mean(daily_visitors)) %>% ggplot() + geom_line(mapping = aes(x = dayofmonth, y = avg_traffic)) + 
-  geom_vline(mapping = aes(xintercept = 18), color = "red")
+  geom_vline(mapping = aes(xintercept = 18), color = "red") + labs(title = "Average Traffic In May 2021")
+
+ggsave("All Traffic.png")
 ```
 
 
@@ -160,9 +162,9 @@ retail_geo %>% group_by(dayofmonth, State, STATEFP) %>% summarise(avg_traffic=me
 # # Regressions
 
 ```{r}
-retail_vax <- retail_vax %>% mutate(post = ifelse(dayofmonth>=18, 1,0))
+retail_vax_vote <- retail_vax_vote %>% mutate(post = ifelse(dayofmonth>=18, 1,0))
 
-retail_vax %>% group_by(dayofmonth) %>% summarise(t = mean(post))
+retail_vax_vote %>% group_by(dayofmonth) %>% summarise(t = mean(post))
 
 reg1 <- lm(daily_visitors~post, data = retail_vax_vote)
 

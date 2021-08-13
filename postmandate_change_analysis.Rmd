@@ -52,7 +52,7 @@ retail_indicators <- retail_indicators %>% mutate(gop_win = ifelse(per_gop>0.5,1
 retail_indicators <- retail_indicators %>% mutate(svi_fac = factor(`SVI Category`, levels = c("Very Low Vulnerability", "Low Vulnerability", "Moderate Vulnerability", "High Vulnerability", "Very High Vulnerability"), ordered = TRUE), cvac_fac = factor(`CVAC Category`, levels = c("Very Low Vulnerability", "Low Vulnerability", "Moderate Vulnerability", "High Vulnerability", "Very High Vulnerability"), ordered = TRUE))
 
 
-retail_
+#retail_
 #retail_indicators %>% group_by(chr_fips) %>% summarise(n_walmarts = n_distinct(placekey))
 ```
 # Week Grouping
@@ -65,6 +65,8 @@ retail_indicators <- retail_indicators %>% mutate(wksfrom = case_when(
   dayofmonth>=18 & dayofmonth<25 ~ "One Week After",
   dayofmonth>=25 ~ "Two Weeks After"
   ))
+
+retail_indicators$wksfrom <- factor(retail_indicators$wksfrom, levels = c("More than Two Weeks Before", "Two Weeks Before", "One Week Before", "One Week After", "Two Weeks After", ordered = TRUE))
 
 retail_indicators %>% group_by(wksfrom) %>% summarise(n=n())
 
@@ -89,6 +91,8 @@ t.test(retail_indicators$daily_visitors[retail_indicators$wksfrom == "Two Weeks 
 
 retail_indicators <-retail_indicators %>%  group_by(placekey, wksfrom) %>% mutate(wkavg = mean(daily_visitors))
 
+retail_indicators %>% group_by(placekey) %>%  mutate(mask_change = daily_visitors-lag(daily_visitors), wkchange = wkavg-lag(wkavg))
+
 retail_change <- retail_indicators %>% group_by(placekey) %>%  mutate(mask_change = daily_visitors-lag(daily_visitors), wkchange = wkavg-lag(wkavg)) %>% filter(dayofmonth==18)
 
 #retail_change <- retail_change %>% group_by(wksfrom) %>% mutate(wkavg = mean(daily_visitors))
@@ -97,17 +101,25 @@ retail_change <- retail_indicators %>% group_by(placekey) %>%  mutate(mask_chang
 
 #retail_change %>% ungroup() %>% select(State, state_avg_change) %>% mutate(dec = ntile(state_avg_change, 10))%>% group_by(State) %>% summarise(q = mean(dec))
 
-avg_dec <- retail_change %>% group_by(State) %>% summarise(state_avg_change = mean(mask_change, na.rm = TRUE)) %>% mutate(dec = ntile(state_avg_change, 10))
+avg_dec <- retail_change %>% group_by(State) %>% summarise(state_avg_change = mean(mask_change, na.rm = TRUE), state_wk_change = mean(wkchange, na.rm = TRUE)) %>% mutate(dec_day = ntile(state_avg_change, 10), dec_week = ntile(state_wk_change, 10))
 
 retail_change <- left_join(retail_change, avg_dec, by = "State")
 
 summary(retail_change$mask_change)
 
-biggest_jump <- retail_change %>% filter(dec==10)
+summary(retail_change$wkchange)
 
-biggest_drop <- retail_change %>% filter(dec == 1)
+biggest_jump_day <- retail_change %>% filter(dec_day==10)
 
-middle_moves <- retail_change %>% filter(dec == 5| dec==6)
+biggest_drop_day <- retail_change %>% filter(dec_day == 1)
+
+middle_moves_day <- retail_change %>% filter(dec_day == 5| dec_day==6)
+
+biggest_jump_wk <- retail_change %>% filter(dec_week==10)
+
+biggest_drop_wk <- retail_change %>% filter(dec_week == 1)
+
+middle_moves_wk <- retail_change %>% filter(dec_week == 5| dec_week==6)
 
 
 
@@ -156,6 +168,12 @@ reg_gop1 <- tidy(reg_gop1)
 ```{r}
 retail_change %>% filter(!is.na(gop_win)) %>%  ggplot() + 
   geom_boxplot(mapping = aes(y = mask_change, fill = svi_fac)) + facet_wrap(~gop_win)
+
+retail_change %>% filter(!is.na(gop_win), !is.na(svi_fac)) %>%  ggplot() + 
+  geom_boxplot(mapping = aes(y = mask_change, fill = svi_fac)) + facet_wrap(~gop_win)
+
+retail_change %>% filter(!is.na(gop_win), !is.na(svi_fac)) %>%  ggplot() + 
+  geom_boxplot(mapping = aes(y = wkchange, fill = svi_fac)) + facet_wrap(~gop_win)
 ```
 
 
