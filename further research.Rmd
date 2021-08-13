@@ -1,0 +1,144 @@
+---
+title: "Extended Research"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+# # Setup
+#Libraries
+
+```{r}
+library(tidyverse)
+library(readr)
+library(sf)
+
+library(broom)
+library(lubridate)
+library(stringr)
+```
+
+# Data Import
+
+```{r}
+case_data_counties <- read.csv("us-counties-rolling-cases.csv")
+
+case_data_states <- read.csv("us-states-rolling.csv")
+
+case_data_US <- read.csv("us-rolling-cases.csv")
+
+mobility_2020 <-read.csv("2020_US_Region_Mobility_Report.csv")
+
+mobility_2021 <- read.csv("2021_US_Region_Mobility_Report.csv")
+
+vax_data <- read_csv("county_week26_data_fixed.csv")
+
+store_sf <- st_read("tl_2016_us_county.shp")
+
+```
+
+# Data Cleaning
+```{r}
+
+#dates - cases
+case_data_counties$date <- ymd(case_data_counties$date)
+case_data_states$date <- ymd(case_data_states$date)
+case_data_US$date <- ymd(case_data_US$date)
+
+#fips - cases
+case_data_states <- case_data_states %>% separate(geoid, into = c("geoid", "sfips"), sep = "-")
+case_data_states$geoid <- NULL
+
+case_data_counties <- case_data_counties %>% separate(geoid, into = c("geoid", "scfips"), sep = "-")
+case_data_counties$geoid <- NULL
+
+#date - mobility
+mobility_2020$date <- ymd(mobility_2020$date)
+mobility_2021$date <- ymd(mobility_2021$date)
+
+
+mobility_2020_us <- mobility_2020 %>% filter(sub_region_1 == "")
+mobility_2020_states <- mobility_2020 %>% filter(sub_region_1 != "", sub_region_2=="")
+
+mobility_2020_counties <- mobility_2020 %>% filter(sub_region_1 != "", sub_region_2!="")
+
+mobility_2021_us <- mobility_2021 %>% filter(sub_region_1 == "")
+mobility_2021_states <- mobility_2021 %>% filter(sub_region_1 != "", sub_region_2=="")
+
+mobility_2021_counties <- mobility_2021 %>% filter(sub_region_1 != "", sub_region_2!="")
+
+# fips - vax
+vax_data$`FIPS Code`<-as.character(vax_data$`FIPS Code`)
+
+vax_data$`FIPS Code` <- str_pad(vax_data$`FIPS Code`, 5, "left", "0")
+
+case_data_states %>% filter(length(sfips)==1)
+
+# state name
+statename <- case_data_counties %>% select(scfips, state) %>% mutate(STATEFP = substr(scfips, 1,2)) %>% select(state, STATEFP)
+
+#joining for statefips
+
+mobility_2020 %>%  filter(sub_region_1 == "Alabama")
+
+statename %>% filter(state == "Alabama")
+
+
+mobility_2020_states <- left_join(mobility_2020_states, statename, by = c("sub_region_1" = "state"))
+
+mobility_2021_states <- left_join(mobility_2020_states, statename, by = c("sub_region_1" = "state"))
+
+#storesf
+store_sf <- store_sf %>% mutate(GEOID = as.character(GEOID))
+
+
+store_sf <- st_transform(store_sf, 4326)
+
+```
+
+# # 2020 Analysis
+
+# Panic Shopping Period
+
+```{r}
+# struggling with this one because I'm not sure what to regress it on?
+
+mobility_2020_us %>%  filter(month(date)==03) %>% ggplot() + geom_line(mapping = aes(y = retail_and_recreation_percent_change_from_baseline, x = date))
+
+mobility_2020_us %>%  filter(month(date)==03) %>% ggplot() + geom_line(mapping = aes(y = grocery_and_pharmacy_percent_change_from_baseline, x = date))
+```
+# geospatial - panic buying
+
+```{r}
+state_mobility_geo <- left_join(store_sf, mobility_2020_states, by = "STATEFP")
+
+state_mobility_geo %>% filter(month(date)==03)
+#%>% ggplot() + 
+  #geom_sf(mapping = aes(fill = grocery_and_pharmacy_percent_change_from_baseline)) + 
+  #facet_wrap(~date)
+
+```
+
+
