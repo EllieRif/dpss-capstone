@@ -82,15 +82,9 @@ mobility_2020$date <- ymd(mobility_2020$date)
 mobility_2021$date <- ymd(mobility_2021$date)
 
 
-mobility_2020_us <- mobility_2020 %>% filter(sub_region_1 == "")
-mobility_2020_states <- mobility_2020 %>% filter(sub_region_1 != "", sub_region_2=="")
 
-mobility_2020_counties <- mobility_2020 %>% filter(sub_region_1 != "", sub_region_2!="")
 
-mobility_2021_us <- mobility_2021 %>% filter(sub_region_1 == "")
-mobility_2021_states <- mobility_2021 %>% filter(sub_region_1 != "", sub_region_2=="")
 
-mobility_2021_counties <- mobility_2021 %>% filter(sub_region_1 != "", sub_region_2!="")
 
 # fips - vax
 #vax_data$`FIPS Code`<-as.character(vax_data$`FIPS Code`)
@@ -100,7 +94,7 @@ mobility_2021_counties <- mobility_2021 %>% filter(sub_region_1 != "", sub_regio
 #case_data_counties %>% filter(length(scfips)==4)
 
 # state name
-statename <- case_data_states %>% select(sfips, state)
+statename <- case_data_states %>% select(sfips, state) %>% distinct(sfips, state)
 
 #joining for statefips
 
@@ -109,9 +103,6 @@ statename <- case_data_states %>% select(sfips, state)
 #statename %>% filter(state == "Alabama")
 
 
-mobility_2020_states <- left_join(mobility_2020_states, statename, by = c("sub_region_1" = "state"))
-
-mobility_2021_states <- left_join(mobility_2021_states, statename, by = c("sub_region_1" = "state"))
 
 #storesf
 #store_sf <- store_sf %>% mutate(GEOID = as.character(GEOID))
@@ -120,6 +111,51 @@ mobility_2021_states <- left_join(mobility_2021_states, statename, by = c("sub_r
 #store_sf <- st_transform(store_sf, 4326)
 
 ```
+
+
+
+```{r}
+#improving varnames for easier envirnment readability
+us20_mob <- mobility_2020 %>% filter(sub_region_1 == "")
+
+st20_mob <- mobility_2020 %>% filter(sub_region_1 != "", sub_region_2=="")  %>% distinct(sub_region_1, date, .keep_all = TRUE)
+
+co20_mob <- mobility_2020 %>% filter(sub_region_1 != "", sub_region_2!="")
+
+
+```
+
+
+
+```{r}
+us21_mob <- mobility_2021 %>% filter(sub_region_1 == "")
+
+
+st21_mob <- mobility_2021 %>% filter(sub_region_1 != "", sub_region_2=="")  %>% distinct(sub_region_1, date, .keep_all = TRUE)
+
+co21_mob <- mobility_2021 %>% filter(sub_region_1 != "", sub_region_2!="")
+
+#grouped
+
+us_mob <-bind_rows(us20_mob, us21_mob)
+
+st_mob <-bind_rows(st20_mob, st21_mob)
+
+co_mob <- bind_rows(co20_mob, co21_mob)
+
+```
+
+
+
+```{r}
+st20_mob <- left_join(st20_mob, statename, by = c("sub_region_1" = "state"))
+
+st21_mob <- left_join(st21_mob, statename, by = c("sub_region_1" = "state"))
+
+st_mob <- left_join(st_mob, statename, by = c("sub_region_1" = "state"))
+
+```
+
 
 # Census
 
@@ -139,7 +175,7 @@ census_spatial <- get_acs(
 ```
 
 
-# # 2020 Analysis
+# # Visualizations - 2020
 
 # Panic Shopping Period
 
@@ -156,7 +192,7 @@ mobility_2020_us %>%  filter(month(date)==03) %>% ggplot() + geom_line(mapping =
 
 extreme_buying <- mobility_2020_states %>% filter(month(date)==3, day(date)>=10, day(date)<=13) %>% distinct(sfips, date, .keep_all = TRUE) %>% select(-sub_region_2, -metro_area, -census_fips_code, -iso_3166_2_code)
 
-test_distinct <- mobility_2020_states %>% distinct(sfips, date, .keep_all = TRUE)
+#test_distinct <- mobility_2020_states %>% distinct(sfips, date, .keep_all = TRUE)
   
 extreme_311 <- extreme_buying %>% group_by(sfips) %>%  filter(day(date)==11) 
 
@@ -175,27 +211,143 @@ state_mobility_geo %>%  ggplot() +
 # Order Data
 
 ```{r}
-#Pulling from Json rather than using my previosu data
-
-#Use simplifyvector or it comes in as a hella big list
-#ok that's only giving me 1k values so we're going with an export
-
 full_order_data <- read_csv("stay_at_home_cdc.csv")
 
-#order_data <- full_order_data %>% filter(Issuing_Jurisdiction==State_Tribe_Territory) %>% distinct(State_Tribe_Territory, Stay_at_Home_Order_Recommendation, Effective_date, Expiration_date, .keep_all = T)
- #%>%  select(State_Tribe_Territory, FIPS_State, Stay_at_Home_Order_Recommendation, Effective_date, Expiration_date)
-#filter(!is.na(Effective_date) & !is.na(Expiration_date))
+order_data <- full_order_data %>% filter(State_Tribe_Territory==Issuing_Jurisdiction, Order_code>1)
 
-# Note: excluding at risk or certain area orders
+simp_order_data <- order_data%>% distinct(State_Tribe_Territory, Order_code, Effective_date, Expiration_date, .keep_all = T)
+
+full_order_data %>% filter(FIPS_State==9, Order_code>1)
+```
+Goals: compare during periods including and not including orders
+
+```{r}
+# yeah ok we're just gonna use my data, the county level/date listings overcomplicate it for what i need
+
+# can create a separate branch with that data later
+
+# goals: compare during periods including/not including orders
+```
+# # Regressions - 2020
+Regress movement in different categories based primarily on case levels. Introduce demographics, masking, vaccine hesitancy, SVI, and etc later
+
+# data cleaning
+
+adjusting colnames to help joins
+```{r}
+# grocery/pharma -- others will require controlling for stay-at-home-order
 
 
-simp_order_data <- full_order_data
+colnames(case_data_US)
 
-simp_order_data<- simp_order_data %>% mutate(Expiration_date = replace_na(Expiration_date,0))
+colnames(case_data_US) <- paste("us_", colnames(case_data_US), sep = "")
 
-simp_order_data <- simp_order_data %>% filter(Stay_at_Home_Order_Recommendation == "Mandatory for all individuals" | Stay_at_Home_Order_Recommendation == "Advisory/Recommendation") %>%  group_by(State_Tribe_Territory, Stay_at_Home_Order_Recommendation) %>% summarise(Effective_date=min(Effective_date), Expiration_date=max(Expiration_date))
+colnames(case_data_states) <- paste("st_", colnames(case_data_states), sep = "")
 
-full_order_data %>% filter(State_Tribe_Territory=="AK")
+colnames(case_data_counties) <- paste("co_", colnames(case_data_counties), sep = "")
+
+
+
+
 ```
 
+
+I may work with US movement @ us caselevel, state movement at state caselevel, etc, but it's a lot of joins and creating a lot of DFs
+can use sums instead of joins?
+```{r}
+#us_mc20 <- left_join(us20_mob, case_data_US, by=c("date" = "us_date"))
+
+#us_mc21 <- left_join(us21_mob, case_data_US, by=c("date" = "us_date"))
+
+#state_mc20 <- left_join(st20_mob, case_data_states, by = c(c("date" = "st_date"),c("sub_region_1" = "st_state")))
+
+#state_mc21 <- left_join(st21_mob, case_data_states, by = c(c("date" = "st_date"),c("sub_region_1" = "st_state")))
+
+sc_cases <- left_join(case_data_counties, case_data_states, by = c(c("co_state" = "st_state"), c("co_date" = "st_date")))
+
+sc_cases <- left_join(case_data_counties, case_data_states, by = c(c("co_state" = "st_state"), c("co_date" = "st_date")))
+
+all_cases <- left_join(sc_cases, case_data_US, by = c("co_date" = "us_date"))
+
+co_mob$census_fips_code <- as.character(co_mob$census_fips_code)
+
+co_mob$census_fips_code <- str_pad(co_mob$census_fips_code, 5, "left", "0")
+
+# joining onto mobility data because case data is empty in early days
+county_cm <- left_join(co_mob, all_cases, by = c("date" = "co_date", "census_fips_code" = "co_scfips"))
+
+county_cm <- county_cm %>% select(-metro_area, -iso_3166_2_code, -place_id, -co_county, -co_state, -us_geoid, -st_sfips, -country_region_code, -country_region)
+```
+
+
+```{r}
+
+
+case_cols <- county_cm %>% select(co_cases:us_deaths_avg_per_100k) %>% colnames()
+
+test_narm <- county_cm
+
+
+
+for (c in case_cols) {
+  test_narm[[c]] <- replace_na(test_narm[[c]],0)
+  
+}
+
+test_narm %>% group_by(date) %>% filter(year(date)==2021) %>% summarise(c=mean(us_cases))
+#check on syntax for selecting with brackets and etc BUT IT WORKED
+
+
+replace_na(county_cm$co_cases,0)
+```
+
+
+# grocery/pharma (more independent of orders than retail)
+
+```{r}
+
+grocery_pharma <- test_narm %>% select(sub_region_1: date, grocery_and_pharmacy_percent_change_from_baseline, co_cases:us_deaths_avg_per_100k) %>% filter(!is.na(grocery_and_pharmacy_percent_change_from_baseline), month(date)>=6 | year(date)==2021)
+
+
+#examine randomness of NA for grocery and pharma later--double check it isnt a merge issue
+#filtering on date to mitigate against stay at home orders. plan to incorporate fully in future regressions
+
+grocery_pharma$grocery_and_pharmacy_percent_change_from_baseline<-as.double(grocery_pharma$grocery_and_pharmacy_percent_change_from_baseline)
+
+grocery_pharma %>% group_by(date) %>% summarise(c=sum(us_cases, na.rm=TRUE))
+
+gp_nat_only <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ us_cases_avg_per_100k, data = grocery_pharma)
+
+gp_nat_only <- tidy(gp_nat_only)
+
+gp_state_only <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ st_cases_avg_per_100k, data = grocery_pharma)
+
+gp_state_only <- tidy(gp_state_only)
+
+gp_county_only <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ co_cases_avg_per_100k, data = grocery_pharma)
+
+gp_county_only <- tidy(gp_county_only)
+
+grocery_pharma %>% filter(is.na(grocery_and_pharmacy_percent_change_from_baseline))
+```
+
+
+# retail and rec
+```{r}
+retail_rec <- test_narm %>% select(sub_region_1: date, retail_and_recreation_percent_change_from_baseline, co_cases:us_deaths_avg_per_100k) %>% filter(!is.na(retail_and_recreation_percent_change_from_baseline), month(date)>=6 | year(date)==2021)
+
+
+rr_nat_only <- lm(retail_and_recreation_percent_change_from_baseline ~ us_cases_avg_per_100k, data = retail_rec)
+
+rr_st_only <- lm(retail_and_recreation_percent_change_from_baseline ~ st_cases_avg_per_100k, data = retail_rec)
+
+rr_co_only <- lm(retail_and_recreation_percent_change_from_baseline ~ co_cases_avg_per_100k, data = retail_rec)
+
+rr_nat_only <- tidy(rr_nat_only)
+
+rr_co_only <- tidy(rr_co_only)
+
+rr_st_only <- tidy(rr_st_only)
+
+```
 
