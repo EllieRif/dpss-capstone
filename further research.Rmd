@@ -34,10 +34,13 @@ Note that the `echo = FALSE` parameter was added to the code chunk to prevent pr
 library(tidyverse)
 library(readr)
 library(sf)
-
 library(broom)
 library(lubridate)
 library(stringr)
+
+library(tidycensus)
+library(sp)
+library(jsonlite)
 ```
 
 # Data Import
@@ -53,9 +56,9 @@ mobility_2020 <-read.csv("2020_US_Region_Mobility_Report.csv")
 
 mobility_2021 <- read.csv("2021_US_Region_Mobility_Report.csv")
 
-vax_data <- read_csv("county_week26_data_fixed.csv")
+#vax_data <- read_csv("county_week26_data_fixed.csv")
 
-store_sf <- st_read("tl_2016_us_county.shp")
+#store_sf <- st_read("tl_2016_us_county.shp")
 
 ```
 
@@ -90,33 +93,51 @@ mobility_2021_states <- mobility_2021 %>% filter(sub_region_1 != "", sub_region_
 mobility_2021_counties <- mobility_2021 %>% filter(sub_region_1 != "", sub_region_2!="")
 
 # fips - vax
-vax_data$`FIPS Code`<-as.character(vax_data$`FIPS Code`)
+#vax_data$`FIPS Code`<-as.character(vax_data$`FIPS Code`)
 
-vax_data$`FIPS Code` <- str_pad(vax_data$`FIPS Code`, 5, "left", "0")
+#vax_data$`FIPS Code` <- str_pad(vax_data$`FIPS Code`, 5, "left", "0")
 
-case_data_states %>% filter(length(sfips)==1)
+#case_data_counties %>% filter(length(scfips)==4)
 
 # state name
-statename <- case_data_counties %>% select(scfips, state) %>% mutate(STATEFP = substr(scfips, 1,2)) %>% select(state, STATEFP)
+statename <- case_data_states %>% select(sfips, state)
 
 #joining for statefips
 
-mobility_2020 %>%  filter(sub_region_1 == "Alabama")
+#mobility_2020 %>%  filter(sub_region_1 == "Alabama")
 
-statename %>% filter(state == "Alabama")
+#statename %>% filter(state == "Alabama")
 
 
 mobility_2020_states <- left_join(mobility_2020_states, statename, by = c("sub_region_1" = "state"))
 
-mobility_2021_states <- left_join(mobility_2020_states, statename, by = c("sub_region_1" = "state"))
+mobility_2021_states <- left_join(mobility_2021_states, statename, by = c("sub_region_1" = "state"))
 
 #storesf
-store_sf <- store_sf %>% mutate(GEOID = as.character(GEOID))
+#store_sf <- store_sf %>% mutate(GEOID = as.character(GEOID))
 
 
-store_sf <- st_transform(store_sf, 4326)
+#store_sf <- st_transform(store_sf, 4326)
 
 ```
+
+# Census
+
+```{r}
+vars_dc_2019 <- load_variables(2019, "acs5")
+
+#B01001_001
+
+census_spatial <- get_acs(
+  variables = "B01001_001",
+  geography = "state",
+  year = 2019,
+  
+  geometry = TRUE
+  
+)
+```
+
 
 # # 2020 Analysis
 
@@ -124,21 +145,57 @@ store_sf <- st_transform(store_sf, 4326)
 
 ```{r}
 # struggling with this one because I'm not sure what to regress it on?
+#https://www.ncsolutions.com/covid/a-bulk-buying-tipping-point/
 
 mobility_2020_us %>%  filter(month(date)==03) %>% ggplot() + geom_line(mapping = aes(y = retail_and_recreation_percent_change_from_baseline, x = date))
 
 mobility_2020_us %>%  filter(month(date)==03) %>% ggplot() + geom_line(mapping = aes(y = grocery_and_pharmacy_percent_change_from_baseline, x = date))
 ```
 # geospatial - panic buying
+```{r}
+
+extreme_buying <- mobility_2020_states %>% filter(month(date)==3, day(date)>=10, day(date)<=13) %>% distinct(sfips, date, .keep_all = TRUE) %>% select(-sub_region_2, -metro_area, -census_fips_code, -iso_3166_2_code)
+
+test_distinct <- mobility_2020_states %>% distinct(sfips, date, .keep_all = TRUE)
+  
+extreme_311 <- extreme_buying %>% group_by(sfips) %>%  filter(day(date)==11) 
+
+
+state_mobility_geo <- right_join(census_spatial, extreme_buying, by = c("GEOID"="sfips"))
+
+b_lims <- state_mobility_geo %>% st_bbox()
+
+state_mobility_geo %>% filter(day(date)==11) %>% ggplot() + 
+  geom_sf(mapping = aes(fill = grocery_and_pharmacy_percent_change_from_baseline)) + scale_fill_distiller(palette = "YlOrRd", name = "grocery") + xlim(-180,-25)
+
+
+state_mobility_geo %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = grocery_and_pharmacy_percent_change_from_baseline)) + scale_fill_distiller(palette = "YlOrRd", name = "grocery") + xlim(-180,-25) + facet_wrap(~date)
+```
+# Order Data
 
 ```{r}
-state_mobility_geo <- left_join(store_sf, mobility_2020_states, by = "STATEFP")
+#Pulling from Json rather than using my previosu data
 
-state_mobility_geo %>% filter(month(date)==03)
-#%>% ggplot() + 
-  #geom_sf(mapping = aes(fill = grocery_and_pharmacy_percent_change_from_baseline)) + 
-  #facet_wrap(~date)
+#Use simplifyvector or it comes in as a hella big list
+#ok that's only giving me 1k values so we're going with an export
 
+full_order_data <- read_csv("stay_at_home_cdc.csv")
+
+#order_data <- full_order_data %>% filter(Issuing_Jurisdiction==State_Tribe_Territory) %>% distinct(State_Tribe_Territory, Stay_at_Home_Order_Recommendation, Effective_date, Expiration_date, .keep_all = T)
+ #%>%  select(State_Tribe_Territory, FIPS_State, Stay_at_Home_Order_Recommendation, Effective_date, Expiration_date)
+#filter(!is.na(Effective_date) & !is.na(Expiration_date))
+
+# Note: excluding at risk or certain area orders
+
+
+simp_order_data <- full_order_data
+
+simp_order_data<- simp_order_data %>% mutate(Expiration_date = replace_na(Expiration_date,0))
+
+simp_order_data <- simp_order_data %>% filter(Stay_at_Home_Order_Recommendation == "Mandatory for all individuals" | Stay_at_Home_Order_Recommendation == "Advisory/Recommendation") %>%  group_by(State_Tribe_Territory, Stay_at_Home_Order_Recommendation) %>% summarise(Effective_date=min(Effective_date), Expiration_date=max(Expiration_date))
+
+full_order_data %>% filter(State_Tribe_Territory=="AK")
 ```
 
 
