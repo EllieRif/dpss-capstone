@@ -183,14 +183,14 @@ census_spatial <- get_acs(
 # struggling with this one because I'm not sure what to regress it on?
 #https://www.ncsolutions.com/covid/a-bulk-buying-tipping-point/
 
-mobility_2020_us %>%  filter(month(date)==03) %>% ggplot() + geom_line(mapping = aes(y = retail_and_recreation_percent_change_from_baseline, x = date))
+us20_mob %>%  filter(month(date)==03) %>% ggplot() + geom_line(mapping = aes(y = retail_and_recreation_percent_change_from_baseline, x = date))
 
-mobility_2020_us %>%  filter(month(date)==03) %>% ggplot() + geom_line(mapping = aes(y = grocery_and_pharmacy_percent_change_from_baseline, x = date))
+us20_mob %>%  filter(month(date)==03) %>% ggplot() + geom_line(mapping = aes(y = grocery_and_pharmacy_percent_change_from_baseline, x = date))
 ```
 # geospatial - panic buying
 ```{r}
 
-extreme_buying <- mobility_2020_states %>% filter(month(date)==3, day(date)>=10, day(date)<=13) %>% distinct(sfips, date, .keep_all = TRUE) %>% select(-sub_region_2, -metro_area, -census_fips_code, -iso_3166_2_code)
+extreme_buying <- st20_mob %>% filter(month(date)==3, day(date)>=10, day(date)<=13) %>% distinct(sfips, date, .keep_all = TRUE) %>% select(-sub_region_2, -metro_area, -census_fips_code, -iso_3166_2_code)
 
 #test_distinct <- mobility_2020_states %>% distinct(sfips, date, .keep_all = TRUE)
   
@@ -298,7 +298,7 @@ test_narm %>% group_by(date) %>% filter(year(date)==2021) %>% summarise(c=mean(u
 #check on syntax for selecting with brackets and etc BUT IT WORKED
 
 
-replace_na(county_cm$co_cases,0)
+#replace_na(county_cm$co_cases,0)
 ```
 
 
@@ -328,6 +328,10 @@ gp_county_only <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ co_case
 
 gp_county_only <- tidy(gp_county_only)
 
+gp_nsc <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ us_cases_avg_per_100k + st_cases_avg_per_100k + co_cases_avg_per_100k, data = grocery_pharma)
+
+gp_nsc <- tidy(gp_nsc)
+
 grocery_pharma %>% filter(is.na(grocery_and_pharmacy_percent_change_from_baseline))
 ```
 
@@ -349,5 +353,127 @@ rr_co_only <- tidy(rr_co_only)
 
 rr_st_only <- tidy(rr_st_only)
 
+```
+
+#risk levels grouped
+
+```{r}
+grocery_pharma <- grocery_pharma %>% mutate(
+state_risk_group = case_when(
+    st_cases_avg_per_100k>=0 & st_cases_avg_per_100k<=10 ~ 1,
+    st_cases_avg_per_100k>10 & st_cases_avg_per_100k<=30 ~2,
+    st_cases_avg_per_100k>30 & st_cases_avg_per_100k<=50 ~3,
+    st_cases_avg_per_100k>50 & st_cases_avg_per_100k<=70 ~4,
+    st_cases_avg_per_100k>70 & st_cases_avg_per_100k<=100 ~ 5,
+    st_cases_avg_per_100k>100 & st_cases_avg_per_100k<=250 ~ 6,
+    st_cases_avg_per_100k>250 ~ 7
+    
+  ),
+national_risk_group = case_when(
+    us_cases_avg_per_100k>=0 & us_cases_avg_per_100k<=10 ~ 1,
+    us_cases_avg_per_100k>10 & us_cases_avg_per_100k<=30 ~2,
+    us_cases_avg_per_100k>30 & us_cases_avg_per_100k<=50 ~3,
+    us_cases_avg_per_100k>50 & us_cases_avg_per_100k<=70 ~4,
+    us_cases_avg_per_100k>70 & us_cases_avg_per_100k<=100 ~ 5,
+    us_cases_avg_per_100k>100 & us_cases_avg_per_100k<=250 ~ 6,
+    us_cases_avg_per_100k>250 ~ 7
+
+),
+
+county_risk_group = case_when(
+    co_cases_avg_per_100k>=0 & co_cases_avg_per_100k<=10 ~ 1,
+    co_cases_avg_per_100k>10 & co_cases_avg_per_100k<=30 ~2,
+    co_cases_avg_per_100k>30 & co_cases_avg_per_100k<=50 ~3,
+    co_cases_avg_per_100k>50 & co_cases_avg_per_100k<=70 ~4,
+    co_cases_avg_per_100k>70 & co_cases_avg_per_100k<=100 ~ 5,
+    co_cases_avg_per_100k>100 & co_cases_avg_per_100k<=250 ~ 6,
+    co_cases_avg_per_100k>250 ~ 7
+
+) )
+
+
+grocery_pharma %>% filter(year(date)==2020) %>% group_by(date) %>% summarise(y = mean(us_cases_avg_per_100k)) %>%  ggplot() + 
+  geom_line(mapping=aes(x = date, y = y))
+grocery_pharma %>% group_by(date) %>% summarise(y = mean(us_cases_avg_per_100k)) %>%  ggplot() + 
+  geom_line(mapping=aes(x = date, y = y))
+
+
+
+```
+
+```{r}
+gp_nat_risk_group <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ national_risk_group, data = grocery_pharma)
+
+gp_nat_risk_group <- tidy(gp_nat_risk_group)
+
+gp_st_risk_group <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ state_risk_group, data = grocery_pharma)
+
+gp_st_risk_group <- tidy(gp_st_risk_group)
+
+
+gp_co_risk_group <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ county_risk_group, data = grocery_pharma)
+
+gp_co_risk_group <- tidy(gp_co_risk_group)
+
+gp_nsc_risk_group <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ national_risk_group + state_risk_group + county_risk_group, data = grocery_pharma)
+
+gp_nsc_risk_group <- tidy(gp_nsc_risk_group)
+```
+
+retail and recreation
+
+```{r}
+retail_rec <- retail_rec %>% mutate(
+state_risk_group = case_when(
+    st_cases_avg_per_100k>=0 & st_cases_avg_per_100k<=10 ~ 1,
+    st_cases_avg_per_100k>10 & st_cases_avg_per_100k<=30 ~2,
+    st_cases_avg_per_100k>30 & st_cases_avg_per_100k<=50 ~3,
+    st_cases_avg_per_100k>50 & st_cases_avg_per_100k<=70 ~4,
+    st_cases_avg_per_100k>70 & st_cases_avg_per_100k<=100 ~ 5,
+    st_cases_avg_per_100k>100 & st_cases_avg_per_100k<=250 ~ 6,
+    st_cases_avg_per_100k>250 ~ 7
+    
+  ),
+national_risk_group = case_when(
+    us_cases_avg_per_100k>=0 & us_cases_avg_per_100k<=10 ~ 1,
+    us_cases_avg_per_100k>10 & us_cases_avg_per_100k<=30 ~2,
+    us_cases_avg_per_100k>30 & us_cases_avg_per_100k<=50 ~3,
+    us_cases_avg_per_100k>50 & us_cases_avg_per_100k<=70 ~4,
+    us_cases_avg_per_100k>70 & us_cases_avg_per_100k<=100 ~ 5,
+    us_cases_avg_per_100k>100 & us_cases_avg_per_100k<=250 ~ 6,
+    us_cases_avg_per_100k>250 ~ 7
+
+),
+
+county_risk_group = case_when(
+    co_cases_avg_per_100k>=0 & co_cases_avg_per_100k<=10 ~ 1,
+    co_cases_avg_per_100k>10 & co_cases_avg_per_100k<=30 ~2,
+    co_cases_avg_per_100k>30 & co_cases_avg_per_100k<=50 ~3,
+    co_cases_avg_per_100k>50 & co_cases_avg_per_100k<=70 ~4,
+    co_cases_avg_per_100k>70 & co_cases_avg_per_100k<=100 ~ 5,
+    co_cases_avg_per_100k>100 & co_cases_avg_per_100k<=250 ~ 6,
+    co_cases_avg_per_100k>250 ~ 7
+
+) )
+```
+
+
+```{r}
+rr_nat_risk_group <- lm(retail_and_recreation_percent_change_from_baseline ~ national_risk_group, data = retail_rec)
+
+rr_nat_risk_group <- tidy(rr_nat_risk_group)
+
+rr_st_risk_group <- lm(retail_and_recreation_percent_change_from_baseline ~ state_risk_group, data = retail_rec)
+
+rr_st_risk_group <- tidy(rr_st_risk_group)
+
+
+rr_co_risk_group <- lm(retail_and_recreation_percent_change_from_baseline ~ county_risk_group, data = retail_rec)
+
+rr_co_risk_group <- tidy(rr_co_risk_group)
+
+rr_nsc_risk_group <- lm(retail_and_recreation_percent_change_from_baseline ~ national_risk_group + state_risk_group + county_risk_group, data = retail_rec)
+
+rr_nsc_risk_group <- tidy(rr_nsc_risk_group)
 ```
 
