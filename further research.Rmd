@@ -56,7 +56,7 @@ mobility_2020 <-read.csv("2020_US_Region_Mobility_Report.csv")
 
 mobility_2021 <- read.csv("2021_US_Region_Mobility_Report.csv")
 
-#vax_data <- read_csv("county_week26_data_fixed.csv")
+
 
 #store_sf <- st_read("tl_2016_us_county.shp")
 
@@ -231,7 +231,7 @@ Goals: compare during periods including and not including orders
 # # Regressions - 2020
 Regress movement in different categories based primarily on case levels. Introduce demographics, masking, vaccine hesitancy, SVI, and etc later
 
-# data cleaning
+# data cleaning - mobility + cases
 
 adjusting colnames to help joins
 ```{r}
@@ -276,7 +276,9 @@ co_mob$census_fips_code <- str_pad(co_mob$census_fips_code, 5, "left", "0")
 # joining onto mobility data because case data is empty in early days
 county_cm <- left_join(co_mob, all_cases, by = c("date" = "co_date", "census_fips_code" = "co_scfips"))
 
-county_cm <- county_cm %>% select(-metro_area, -iso_3166_2_code, -place_id, -co_county, -co_state, -us_geoid, -st_sfips, -country_region_code, -country_region)
+county_cm <- county_cm %>% select(-metro_area, -iso_3166_2_code, -place_id, -co_county, -co_state, -us_geoid, -st_sfips, -country_region_code, -country_region) 
+
+#grouping at high level rather than later
 ```
 
 
@@ -290,75 +292,13 @@ test_narm <- county_cm
 
 
 for (c in case_cols) {
-  test_narm[[c]] <- replace_na(test_narm[[c]],0)
+  county_cm[[c]] <- replace_na(county_cm[[c]],0)
   
 }
 
-test_narm %>% group_by(date) %>% filter(year(date)==2021) %>% summarise(c=mean(us_cases))
-#check on syntax for selecting with brackets and etc BUT IT WORKED
+# Adding factoring before subsetting but after cleaning
 
-
-#replace_na(county_cm$co_cases,0)
-```
-
-
-# grocery/pharma (more independent of orders than retail)
-
-```{r}
-
-grocery_pharma <- test_narm %>% select(sub_region_1: date, grocery_and_pharmacy_percent_change_from_baseline, co_cases:us_deaths_avg_per_100k) %>% filter(!is.na(grocery_and_pharmacy_percent_change_from_baseline), month(date)>=6 | year(date)==2021)
-
-
-#examine randomness of NA for grocery and pharma later--double check it isnt a merge issue
-#filtering on date to mitigate against stay at home orders. plan to incorporate fully in future regressions
-
-grocery_pharma$grocery_and_pharmacy_percent_change_from_baseline<-as.double(grocery_pharma$grocery_and_pharmacy_percent_change_from_baseline)
-
-grocery_pharma %>% group_by(date) %>% summarise(c=sum(us_cases, na.rm=TRUE))
-
-gp_nat_only <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ us_cases_avg_per_100k, data = grocery_pharma)
-
-gp_nat_only <- tidy(gp_nat_only)
-
-gp_state_only <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ st_cases_avg_per_100k, data = grocery_pharma)
-
-gp_state_only <- tidy(gp_state_only)
-
-gp_county_only <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ co_cases_avg_per_100k, data = grocery_pharma)
-
-gp_county_only <- tidy(gp_county_only)
-
-gp_nsc <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ us_cases_avg_per_100k + st_cases_avg_per_100k + co_cases_avg_per_100k, data = grocery_pharma)
-
-gp_nsc <- tidy(gp_nsc)
-
-grocery_pharma %>% filter(is.na(grocery_and_pharmacy_percent_change_from_baseline))
-```
-
-
-# retail and rec
-```{r}
-retail_rec <- test_narm %>% select(sub_region_1: date, retail_and_recreation_percent_change_from_baseline, co_cases:us_deaths_avg_per_100k) %>% filter(!is.na(retail_and_recreation_percent_change_from_baseline), month(date)>=6 | year(date)==2021)
-
-
-rr_nat_only <- lm(retail_and_recreation_percent_change_from_baseline ~ us_cases_avg_per_100k, data = retail_rec)
-
-rr_st_only <- lm(retail_and_recreation_percent_change_from_baseline ~ st_cases_avg_per_100k, data = retail_rec)
-
-rr_co_only <- lm(retail_and_recreation_percent_change_from_baseline ~ co_cases_avg_per_100k, data = retail_rec)
-
-rr_nat_only <- tidy(rr_nat_only)
-
-rr_co_only <- tidy(rr_co_only)
-
-rr_st_only <- tidy(rr_st_only)
-
-```
-
-#risk levels grouped
-
-```{r}
-grocery_pharma <- grocery_pharma %>% mutate(
+county_cm <- county_cm %>%  mutate(
 state_risk_group = case_when(
     st_cases_avg_per_100k>=0 & st_cases_avg_per_100k<=10 ~ 1,
     st_cases_avg_per_100k>10 & st_cases_avg_per_100k<=30 ~2,
@@ -390,6 +330,54 @@ county_risk_group = case_when(
     co_cases_avg_per_100k>250 ~ 7
 
 ) )
+
+#test_narm %>% group_by(date) %>% filter(year(date)==2021) %>% summarise(c=mean(us_cases))
+#check on syntax for selecting with brackets and etc BUT IT WORKED
+
+
+#replace_na(county_cm$co_cases,0)
+
+
+```
+
+relevant factors: is an order in place? is a mask mandate in place? is it summer? is it holiday season? voting and svi data
+
+
+
+
+# grocery/pharma (more independent of orders than retail)
+
+```{r}
+
+grocery_pharma <- county_cm %>% select(sub_region_1: date, grocery_and_pharmacy_percent_change_from_baseline, co_cases:us_deaths_avg_per_100k) %>% filter(!is.na(grocery_and_pharmacy_percent_change_from_baseline), month(date)>=6 | year(date)==2021)
+
+
+#examine randomness of NA for grocery and pharma later--double check it isnt a merge issue
+#filtering on date to mitigate against stay at home orders. plan to incorporate fully in future regressions
+
+grocery_pharma$grocery_and_pharmacy_percent_change_from_baseline<-as.double(grocery_pharma$grocery_and_pharmacy_percent_change_from_baseline)
+
+grocery_pharma %>% group_by(date) %>% summarise(c=sum(us_cases, na.rm=TRUE))
+
+gp_nat_only <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ us_cases_avg_per_100k, data = grocery_pharma)
+
+gp_nat_only <- tidy(gp_nat_only)
+
+gp_state_only <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ st_cases_avg_per_100k, data = grocery_pharma)
+
+gp_state_only <- tidy(gp_state_only)
+
+gp_county_only <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ co_cases_avg_per_100k, data = grocery_pharma)
+
+gp_county_only <- tidy(gp_county_only)
+
+gp_nsc <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ us_cases_avg_per_100k + st_cases_avg_per_100k + co_cases_avg_per_100k, data = grocery_pharma)
+
+gp_nsc <- tidy(gp_nsc)
+
+grocery_pharma %>% filter(is.na(grocery_and_pharmacy_percent_change_from_baseline))
+```
+```{r}
 
 
 grocery_pharma %>% filter(year(date)==2020) %>% group_by(date) %>% summarise(y = mean(us_cases_avg_per_100k)) %>%  ggplot() + 
@@ -420,43 +408,27 @@ gp_nsc_risk_group <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ nati
 gp_nsc_risk_group <- tidy(gp_nsc_risk_group)
 ```
 
-retail and recreation
 
+# retail and rec
 ```{r}
-retail_rec <- retail_rec %>% mutate(
-state_risk_group = case_when(
-    st_cases_avg_per_100k>=0 & st_cases_avg_per_100k<=10 ~ 1,
-    st_cases_avg_per_100k>10 & st_cases_avg_per_100k<=30 ~2,
-    st_cases_avg_per_100k>30 & st_cases_avg_per_100k<=50 ~3,
-    st_cases_avg_per_100k>50 & st_cases_avg_per_100k<=70 ~4,
-    st_cases_avg_per_100k>70 & st_cases_avg_per_100k<=100 ~ 5,
-    st_cases_avg_per_100k>100 & st_cases_avg_per_100k<=250 ~ 6,
-    st_cases_avg_per_100k>250 ~ 7
-    
-  ),
-national_risk_group = case_when(
-    us_cases_avg_per_100k>=0 & us_cases_avg_per_100k<=10 ~ 1,
-    us_cases_avg_per_100k>10 & us_cases_avg_per_100k<=30 ~2,
-    us_cases_avg_per_100k>30 & us_cases_avg_per_100k<=50 ~3,
-    us_cases_avg_per_100k>50 & us_cases_avg_per_100k<=70 ~4,
-    us_cases_avg_per_100k>70 & us_cases_avg_per_100k<=100 ~ 5,
-    us_cases_avg_per_100k>100 & us_cases_avg_per_100k<=250 ~ 6,
-    us_cases_avg_per_100k>250 ~ 7
+retail_rec <- test_narm %>% select(sub_region_1: date, retail_and_recreation_percent_change_from_baseline, co_cases:us_deaths_avg_per_100k) %>% filter(!is.na(retail_and_recreation_percent_change_from_baseline), month(date)>=6 | year(date)==2021)
 
-),
 
-county_risk_group = case_when(
-    co_cases_avg_per_100k>=0 & co_cases_avg_per_100k<=10 ~ 1,
-    co_cases_avg_per_100k>10 & co_cases_avg_per_100k<=30 ~2,
-    co_cases_avg_per_100k>30 & co_cases_avg_per_100k<=50 ~3,
-    co_cases_avg_per_100k>50 & co_cases_avg_per_100k<=70 ~4,
-    co_cases_avg_per_100k>70 & co_cases_avg_per_100k<=100 ~ 5,
-    co_cases_avg_per_100k>100 & co_cases_avg_per_100k<=250 ~ 6,
-    co_cases_avg_per_100k>250 ~ 7
+rr_nat_only <- lm(retail_and_recreation_percent_change_from_baseline ~ us_cases_avg_per_100k, data = retail_rec)
 
-) )
+rr_st_only <- lm(retail_and_recreation_percent_change_from_baseline ~ st_cases_avg_per_100k, data = retail_rec)
+
+rr_co_only <- lm(retail_and_recreation_percent_change_from_baseline ~ co_cases_avg_per_100k, data = retail_rec)
+
+rr_nat_only <- tidy(rr_nat_only)
+
+rr_co_only <- tidy(rr_co_only)
+
+rr_st_only <- tidy(rr_st_only)
+
 ```
 
+grouped risk levels
 
 ```{r}
 rr_nat_risk_group <- lm(retail_and_recreation_percent_change_from_baseline ~ national_risk_group, data = retail_rec)
@@ -476,4 +448,36 @@ rr_nsc_risk_group <- lm(retail_and_recreation_percent_change_from_baseline ~ nat
 
 rr_nsc_risk_group <- tidy(rr_nsc_risk_group)
 ```
+
+
+# data cleaning - joining and factoring further data
+
+```{r}
+
+vax_data <- read_csv("county_week26_data_fixed.csv")
+
+vote_data <- read_csv("vote2020.csv")
+
+vax_data$`FIPS Code` <- str_pad(vax_data$`FIPS Code`, 5, "left", "0")
+
+vote_data$county_fips <- str_pad(vote_data$county_fips, 5, "left", "0")
+
+vax_data <- vax_data %>% select(-State, -`County Name`)
+
+vax_vote <- left_join(vote_data, vax_data, by = c("county_fips" = "FIPS Code"))
+
+cm_vax_vote <- left_join(county_cm, vax_vote, by = c("census_fips_code" = "county_fips"))
+
+#keeping it from being too many vars to work with for right now, selecting avgs
+
+cmvv_avg100k <- cm_vax_vote %>%  select(sub_region_1: residential_percent_change_from_baseline, co_cases_avg_per_100k, st_cases_avg_per_100k, us_cases_avg_per_100k, state_risk_group:county_risk_group, votes_gop: `Percent non-Hispanic White`)
+
+# adding factored vars for svi and CVAC
+
+cmvv_avg100k <- cmvv_avg100k %>%  mutate(gop_win = ifelse(per_gop>0.5,1,0), maj_minority = ifelse(`Percent non-Hispanic White`<50, 1, 0), svi_fac = factor(`SVI Category`, levels = c("Very Low Vulnerability", "Low Vulnerability", "Moderate Vulnerability", "High Vulnerability", "Very High Vulnerability"), ordered = TRUE), cvac_fac = factor(`CVAC Category`, levels = c("Very Low Vulnerability", "Low Vulnerability", "Moderate Vulnerability", "High Vulnerability", "Very High Vulnerability"), ordered = TRUE))
+```
+
+a SUPER cool visualization to try would be if i used a for loop to run regressions for every state and then used that as its own DF for geospatial data. I could totally do it
+
+
 

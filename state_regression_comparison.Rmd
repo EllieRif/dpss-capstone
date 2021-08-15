@@ -1,0 +1,265 @@
+---
+title: "state_comparative_analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+Goal: a SUPER cool visualization to try would be if i used a for loop to run regressions for every state and then used that as its own DF for geospatial data. I could totally do it
+
+# libraries
+```{r}
+library(tidyverse)
+library(readr)
+library(sf)
+
+library(broom)
+library(lubridate)
+```
+
+# # Steps to visualization - Grocery Pharma
+
+# clean colnames
+
+```{r}
+cmvv_avg100k <- cmvv_avg100k %>% rename(
+  svi = `Social Vulnerability Index (SVI)`,
+  svi_cat = `SVI Category`,
+cvac =  `Ability to handle a COVID-19 outbreak (CVAC)`,
+  cvac_cat = `CVAC Category`,
+  retail_rec_pctchange = retail_and_recreation_percent_change_from_baseline,
+  grocery_pharma_pctchange = grocery_and_pharmacy_percent_change_from_baseline,
+  parks_pctchange = parks_percent_change_from_baseline,
+  transit_pctchange = transit_stations_percent_change_from_baseline ,
+  work_pctchange = workplaces_percent_change_from_baseline,
+  residential_pctchange = residential_percent_change_from_baseline,
+  pct_hisp = `Percent Hispanic`,
+  pct_native = `Percent non-Hispanic American Indian/Alaska Native`,
+   pct_asian = `Percent non-Hispanic Asian`,
+pct_black = `Percent non-Hispanic Black`,
+  pct_pi =`Percent non-Hispanic Native Hawaiian/Pacific Islander`,
+   pct_white = `Percent non-Hispanic White`
+  
+)
+
+cmvv_avg100k <- cmvv_avg100k %>% mutate(holiday = ifelse(month(date)==11 | month(date)==12, 1, 0))
+```
+
+
+# Develop regression for all states
+
+```{r}
+all_state1 <- lm(grocery_pharma_pctchange ~national_risk_group + state_risk_group + county_risk_group, data = cmvv_avg100k)
+
+all_state1 <- tidy(all_state1)
+
+all_state2 <- lm(grocery_pharma_pctchange ~ national_risk_group + state_risk_group + county_risk_group + svi + per_gop, data = cmvv_avg100k)
+
+all_state2 <- tidy(all_state2)
+
+all_state3 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + per_gop + pct_black + pct_hisp + pct_asian + pct_native + pct_pi, data = cmvv_avg100k)
+
+all_state3 <- tidy(all_state3)
+
+
+all_state4 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop + pct_black + pct_hisp + pct_asian + pct_native + pct_pi, data = cmvv_avg100k)
+
+all_state4 <- tidy(all_state4)
+
+
+all_state5 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi_fac + cvac_fac + per_gop + maj_minority, data = cmvv_avg100k)
+
+all_state5 <- tidy(all_state5)
+
+all_state6 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + maj_minority, data = cmvv_avg100k)
+
+all_state6 <- tidy(all_state6)
+
+
+
+all_state7 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop +`Estimated hesitant` + maj_minority, data = cmvv_avg100k)
+
+all_state7 <- tidy(all_state7)
+
+all_state8 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = cmvv_avg100k)
+
+all_state8 <- tidy(all_state8)
+
+```
+
+
+# create DF and for loop
+
+maybe use names prefix? w/ coeff_ or pval_
+
+```{r}
+
+gp_state_results <- data.frame(
+  term = all_state8$term
+)
+
+sn <- statename$state
+
+for (s in sn) {
+  temp_df <- cmvv_avg100k %>% filter(sub_region_1==s)
+  
+  temp_reg <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = temp_df)
+  
+  temp_reg <- tidy(temp_reg)
+  
+  c_name <- paste("coeff", s, sep = "_")
+  p_name <- paste("pval", s, sep = "_")
+  
+  gp_state_results <- gp_state_results %>% mutate(c_name = temp_reg$estimate, p_name <-temp_reg$p.value)
+  
+  
+}
+
+```
+
+
+# debugging for loop
+
+```{r}
+gp_state_results <- data.frame(
+  term = all_state8$term
+)
+
+sn <- statename %>% filter(state %in% cmvv_avg100k$sub_region_1, state!="Alaska", state!="Hawaii") %>% arrange(state)
+
+sn <- sn$state
+
+#missingness with alaska
+#sn <- sort(sn) %>% filter(sn %in% cmvv_avg100k$sub_region_1)
+
+for (s in sn) {
+  temp_df <- cmvv_avg100k %>% filter(sub_region_1==s) %>% drop_na()
+  #print(s)
+  
+  temp_df$sub_region_1
+  
+  c_name <- paste("coeff", s, sep = "_")
+  print(c_name)
+  p_name <- paste("pval", s, sep = "_")
+  print(p_name)
+  
+  temp_reg <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = temp_df)
+  
+  temp_reg <- tidy(temp_reg)
+  
+  state_results[[c_name]] <- temp_reg$estimate
+  state_results[[p_name]] <- temp_reg$p.value
+  #state_results <- state_results %>% mutate(c_name = temp_reg$estimate, p_name <-temp_reg$p.value)
+  
+  
+}
+
+cmvv_avg100k %>% filter(sub_region_1=="Arizona")
+
+cm_vax_vote %>% filter(sub_region_1=="New Mexico")
+```
+# debug 2
+```{r}
+
+
+
+
+gp_state_results <- data.frame(
+  term = all_state8$term
+)
+
+sn <- statename %>% filter(state %in% cmvv_avg100k$sub_region_1, state!="Alaska", state!="Hawaii") %>% arrange(state)
+
+sn <- sn$state
+
+#missingness with alaska
+#sn <- sort(sn) %>% filter(sn %in% cmvv_avg100k$sub_region_1)
+
+for (s in sn) {
+  temp_df <- cmvv_avg100k %>% filter(sub_region_1==s) %>% select(grocery_pharma_pctchange, national_risk_group, state_risk_group, county_risk_group, svi, cvac, per_gop, `Estimated hesitant`, pct_black, pct_hisp, pct_asian, pct_native, pct_pi, holiday) %>% drop_na()
+  #print(s)
+  
+  temp_df$sub_region_1
+  
+  c_name <- paste("coeff", s, sep = "_")
+  print(c_name)
+  p_name <- paste("pval", s, sep = "_")
+  print(p_name)
+  
+  temp_reg <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = temp_df)
+  
+  temp_reg <- tidy(temp_reg)
+  
+  gp_state_results[[c_name]] <- temp_reg$estimate
+  gp_state_results[[p_name]] <- temp_reg$p.value
+  #state_results <- state_results %>% mutate(c_name = temp_reg$estimate, p_name <-temp_reg$p.value)
+  
+  
+}
+
+
+```
+# pivoting df
+
+```{r}
+gp_long_state_results <- gp_state_results %>% pivot_longer(cols = c(coeff_Alabama:pval_Wyoming), names_to = c("est_pval", "state"), names_sep = "_")
+
+gp_wide_state_results <- gp_long_state_results %>% pivot_wider(names_from = term, values_from = value)
+
+gp_state_coeffs <- gp_wide_state_results %>% filter(est_pval=="coeff")
+```
+
+
+#rejoining geospatial data
+
+```{r}
+# adding fips back in
+
+gp_state_coeffs <- left_join(gp_state_coeffs, statename)
+
+gp_state_coeffs <- gp_state_coeffs %>% rename(intercept = `(Intercept)`)
+
+gp_state_geo_coeffs <- right_join(census_spatial, gp_state_coeffs, by = c("GEOID"="sfips"))
+```
+
+# geospatial charts -- intercept
+
+```{r}
+gp_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = intercept/100)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change")
+```
+```{r}
+gp_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = national_risk_group)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "GP - Responsiveness to National Level Cases")
+
+
+gp_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = state_risk_group)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "GP - Responsiveness to State Level Cases")
+
+gp_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = county_risk_group)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "GP - Responsiveness to County Level Cases")
+```
+
