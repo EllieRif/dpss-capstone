@@ -34,15 +34,24 @@ library(tidyverse)
 library(readr)
 library(sf)
 
+library(broom)
+library(lubridate)
+
 ```
 
 # # Data
 ```{r}
-retail_data <- read_csv("retail_data_export.csv")
+retail <- read_csv("retail_data_export.csv")
 vax_data <- read_csv("county_week26_data_fixed.csv")
+vax_data$`FIPS Code`<-as.character(vax_data$`FIPS Code`)
+vote_data <- read_csv("vote2020.csv")
+vote_data$county_fips <- as.character(vote_data$county_fips)
 store_sf <- st_read("tl_2016_us_county.shp")
-glimpse(retail_data)
+
+glimpse(retail)
 glimpse(store_sf)
+
+retail %>% group_by(dayofmonth) %>% summarise(avg_traffic = mean(daily_visitors))
 ```
 # # Joins
 ```{r}
@@ -52,17 +61,14 @@ store_sf <- store_sf %>% mutate(GEOID = as.character(GEOID))
 
 store_sf <- st_transform(store_sf, 4326)
 retail_data <- st_as_sf(
-  retail_data,
+  retail,
   coords = c("longitude", "latitude"),
   crs = 4326
 )
 
-test_sum <- aggregate(retail_data$daily_visitors, by = list(retail_data$dayofmonth), mean)
 
 
-retail_sum <- retail_data %>% filter(dayofmonth>=4) %>% group_by(dayofmonth) %>% summarise(avg_traffic = mean(daily_visitors))
 
-aggregate(retail_data$daily_visitors, by = list(retail_data$dayofmonth), mean)
 
 #commit test comment
 
@@ -76,58 +82,102 @@ retail_geo <- st_join(
   store_sf,
   join = st_within
 )
+# if you don't remove geometries, summarise will crash. MUST remove geometries
+
+retail_geo$geometry <- NULL
 ```
 
 
 # # Plotting
 
-# sampling
+
+
 
 ```{r}
+retail_geo %>% group_by(dayofmonth) %>% summarise(avg_traffic=mean(daily_visitors)) %>% ggplot() + geom_line(mapping = aes(x = dayofmonth, y = avg_traffic)) + 
+  geom_vline(mapping = aes(xintercept = 18), color = "red") + labs(title = "Average Traffic In May 2021")
 
-retail_samp <- retail_geo %>% filter(dayofmonth >=4, dayofmonth<=28) %>% sample_frac(0.1)
-
-
-retail_samp %>% group_by(dayofmonth) %>% summarise(avg_traffic = mean(daily_visitors)) %>%  ggplot() + 
-  geom_line(mapping = aes(x = dayofmonth, y = avg_traffic)) + 
-  geom_vline(mapping = aes(xintercept = 18), color = "red")
+ggsave("All Traffic.png")
 ```
 
 
+
 ```{r}
-retail_samp2 <- retail_geo %>% filter(dayofmonth >=4, dayofmonth<=28) %>% sample_frac(0.5)
 
-
-retail_samp2 %>% group_by(dayofmonth) %>% summarise(avg_traffic = mean(daily_visitors)) %>%  ggplot() + 
-  geom_line(mapping = aes(x = dayofmonth, y = avg_traffic)) + 
+retail_geo %>% group_by(dayofmonth, STATEFP) %>% summarise(avg_traffic=mean(daily_visitors)) %>% ggplot() + geom_line(mapping = aes(x = dayofmonth, y = avg_traffic, color = STATEFP)) + 
   geom_vline(mapping = aes(xintercept = 18), color = "red")
 
 ```
 
+# Getting State Names
 
 ```{r}
 
-state_daily_avg <- retail_samp %>% group_by(dayofmonth, STATEFP) %>% summarise(avg_traffic = mean(daily_visitors)) %>% mutate(traf_rank = factor(ntile(avg_traffic,5)))
+vax_data$`FIPS Code` <- str_pad(vax_data$`FIPS Code`, 5, "left", "0")
+
+vote_data$county_fips <- str_pad(vote_data$county_fips, 5, "left", "0")
+#vax_data %>%  filter(length(`FIPS Code`)==6)
+#statename <- vax_data %>% select(`FIPS Code`, State) %>% mutate(STATEFP = substr(`FIPS Code`, 1,2)) %>%  select(STATEFP, State)
+statename <- vax_data %>% select(`FIPS Code`, State)
+glimpse(statename)
+glimpse(retail_geo)
+
+retail_geo <- retail_geo %>%  mutate(chr_fips = paste(STATEFP, COUNTYFP, sep = ""))
+
+retail_vax <- left_join(retail_geo, vax_data, by = c("chr_fips" = "FIPS Code"))
+
+retail_vax_vote <- left_join(retail_vax, vote_data, by = c("chr_fips" = "county_fips"))
 
 ```
+
 
 ```{r}
-state_daily_avg %>%  ggplot() + 
-  geom_line(mapping = aes(x= dayofmonth, y=avg_traffic, color = STATEFP)) + facet_wrap(~traf_rank, scales = "free_y")
-```
-```{r}
-tsamp1 <- retail_geo %>% sample_frac(0.1) %>% summarise(avg = mean(daily_visitors))
-
-tsamp2 <- retail_geo %>% sample_frac(0.1) %>% summarise(avg = mean(daily_visitors))
-
-tsamp3 <- retail_geo %>% sample_frac(0.1) %>% summarise(avg = mean(daily_visitors))
-tsamp4 <- retail_geo %>% sample_frac(0.1) %>% summarise(avg = mean(daily_visitors))
+retail_geo %>% group_by(dayofmonth, State, STATEFP) %>% summarise(avg_traffic=mean(daily_visitors, na.rm=TRUE))
 ```
 
 
 ```{r}
+retail_geo %>% group_by(dayofmonth, State, STATEFP) %>% summarise(avg_traffic=mean(daily_visitors))%>% ggplot() + geom_line(mapping = aes(x = dayofmonth, y = avg_traffic, color = State)) + 
+  geom_vline(mapping = aes(xintercept = 18), color = "red")
+
+retail_geo %>% group_by(dayofmonth, State, STATEFP) %>% summarise(avg_traffic=mean(daily_visitors))%>% ggplot() + geom_line(mapping = aes(x = dayofmonth, y = avg_traffic, color = State)) + 
+  geom_vline(mapping = aes(xintercept = 18), color = "red") +
+  theme(legend.position = "none")
+```
+# Head and tail
+
+```{r}
+top_states <- retail_geo %>% group_by(State) %>% summarise(top_avg=max(mean(daily_visitors, na.rm=TRUE))) %>% arrange(desc(top_avg)) %>% head()
+
+bottom_states <- retail_geo %>% group_by(State) %>% summarise(top_avg=max(mean(daily_visitors, na.rm=TRUE))) %>% arrange(top_avg) %>% head()
 
 
+
+retail_geo %>% group_by(dayofmonth, State, STATEFP) %>% summarise(avg_traffic=mean(daily_visitors))%>% ggplot() + geom_line(mapping = aes(x = dayofmonth, y = avg_traffic, color = State)) + 
+  geom_vline(mapping = aes(xintercept = 18), color = "red")
 
 ```
+# Population Data
+
+# # Regressions
+
+```{r}
+retail_vax_vote <- retail_vax_vote %>% mutate(post = ifelse(dayofmonth>=18, 1,0))
+
+retail_vax_vote %>% group_by(dayofmonth) %>% summarise(t = mean(post))
+
+reg1 <- lm(daily_visitors~post, data = retail_vax_vote)
+
+reg1 <- tidy(reg1)
+
+reg2 <- lm(daily_visitors~post*per_gop + `Estimated hesitant`, data = retail_vax_vote)
+
+reg2 <- tidy(reg2)
+
+reg3 <- lm(daily_visitors~per_gop + post*`Estimated hesitant`, data = retail_vax_vote)
+
+reg3 <- tidy(reg3)
+
+```
+
 
