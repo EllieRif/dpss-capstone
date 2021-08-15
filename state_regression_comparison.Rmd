@@ -113,78 +113,7 @@ all_state8 <- tidy(all_state8)
 
 # create DF and for loop
 
-maybe use names prefix? w/ coeff_ or pval_
-
 ```{r}
-
-gp_state_results <- data.frame(
-  term = all_state8$term
-)
-
-sn <- statename$state
-
-for (s in sn) {
-  temp_df <- cmvv_avg100k %>% filter(sub_region_1==s)
-  
-  temp_reg <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = temp_df)
-  
-  temp_reg <- tidy(temp_reg)
-  
-  c_name <- paste("coeff", s, sep = "_")
-  p_name <- paste("pval", s, sep = "_")
-  
-  gp_state_results <- gp_state_results %>% mutate(c_name = temp_reg$estimate, p_name <-temp_reg$p.value)
-  
-  
-}
-
-```
-
-
-# debugging for loop
-
-```{r}
-gp_state_results <- data.frame(
-  term = all_state8$term
-)
-
-sn <- statename %>% filter(state %in% cmvv_avg100k$sub_region_1, state!="Alaska", state!="Hawaii") %>% arrange(state)
-
-sn <- sn$state
-
-#missingness with alaska
-#sn <- sort(sn) %>% filter(sn %in% cmvv_avg100k$sub_region_1)
-
-for (s in sn) {
-  temp_df <- cmvv_avg100k %>% filter(sub_region_1==s) %>% drop_na()
-  #print(s)
-  
-  temp_df$sub_region_1
-  
-  c_name <- paste("coeff", s, sep = "_")
-  print(c_name)
-  p_name <- paste("pval", s, sep = "_")
-  print(p_name)
-  
-  temp_reg <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = temp_df)
-  
-  temp_reg <- tidy(temp_reg)
-  
-  state_results[[c_name]] <- temp_reg$estimate
-  state_results[[p_name]] <- temp_reg$p.value
-  #state_results <- state_results %>% mutate(c_name = temp_reg$estimate, p_name <-temp_reg$p.value)
-  
-  
-}
-
-cmvv_avg100k %>% filter(sub_region_1=="Arizona")
-
-cm_vax_vote %>% filter(sub_region_1=="New Mexico")
-```
-# debug 2
-```{r}
-
-
 
 
 gp_state_results <- data.frame(
@@ -205,9 +134,7 @@ for (s in sn) {
   temp_df$sub_region_1
   
   c_name <- paste("coeff", s, sep = "_")
-  print(c_name)
   p_name <- paste("pval", s, sep = "_")
-  print(p_name)
   
   temp_reg <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = temp_df)
   
@@ -231,7 +158,29 @@ gp_wide_state_results <- gp_long_state_results %>% pivot_wider(names_from = term
 
 gp_state_coeffs <- gp_wide_state_results %>% filter(est_pval=="coeff")
 ```
-
+adding mutations now so they are included in future merges
+```{r}
+gp_state_coeffs <- gp_state_coeffs %>% mutate(
+  nat_pctile = ntile(national_risk_group, 5),
+  st_pctile = ntile(state_risk_group, 5),
+  co_pctile = ntile(county_risk_group, 5),
+  
+  nat_pctile = factor(nat_pctile, levels = c(1:5), labels = c("20%", "40%", "60%", "80%", "100%"), ordered = TRUE),
+  st_pctile = factor(st_pctile, levels = c(1:5), labels = c("20%", "40%", "60%", "80%", "100%"), ordered = TRUE),
+  co_pctile = factor(co_pctile, levels = c(1:5), labels = c("20%", "40%", "60%", "80%", "100%"), ordered = TRUE),
+  
+  nat_pos = ifelse(national_risk_group>=0,1,0),
+  st_pos = ifelse(state_risk_group>=0,1,0),
+  co_pos = ifelse(state_risk_group>=0,1,0),
+  
+  nat_pos = factor(nat_pos, levels=c(0:1), labels = c("-", "+"), ordered = TRUE),
+  
+  st_pos = factor(st_pos, levels=c(0:1), labels = c("-", "+"), ordered = TRUE),
+  
+  co_pos = factor(co_pos, levels=c(0:1), labels = c("-", "+"), ordered = TRUE)
+  
+)
+```
 
 #rejoining geospatial data
 
@@ -261,5 +210,22 @@ gp_state_geo_coeffs %>%  ggplot() +
 
 gp_state_geo_coeffs %>%  ggplot() + 
   geom_sf(mapping = aes(fill = county_risk_group)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "GP - Responsiveness to County Level Cases")
+```
+# Scaling with Ntile to avoid outlier skew
+
+note_ the challenge is when the skew is positive for some and negative for others. maybe make that a color param?
+
+
+
+```{r}
+gp_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = nat_pctile, color = nat_pos)) + scale_fill_brewer(palette = "YlOrRd", name = "Average Traffic Change") + scale_color_manual(values = c("black", "white")) + labs(title = "GP - Responsiveness to National Level Cases")
+
+
+gp_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = st_pctile, color = st_pos)) + scale_fill_brewer(palette = "YlOrRd", name = "Average Traffic Change") + scale_color_manual(values = c("black", "white")) + labs(title = "GP - Responsiveness to State Level Cases")
+
+gp_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = co_pctile, color = co_pos)) + scale_fill_brewer(palette = "YlOrRd", name = "Average Traffic Change") + scale_color_manual(values = c("black", "white")) + labs(title = "GP - Responsiveness to County Level Cases")
 ```
 

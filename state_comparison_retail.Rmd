@@ -44,50 +44,6 @@ library(lubridate)
 
 
 
-# Develop regression for all states
-
-```{r}
-all_state1 <- lm(retail_rec_pctchange ~national_risk_group + state_risk_group + county_risk_group, data = cmvv_avg100k)
-
-all_state1 <- tidy(all_state1)
-
-all_state2 <- lm(retail_rec_pctchange ~ national_risk_group + state_risk_group + county_risk_group + svi + per_gop, data = cmvv_avg100k)
-
-all_state2 <- tidy(all_state2)
-
-all_state3 <- lm(retail_rec_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + per_gop + pct_black + pct_hisp + pct_asian + pct_native + pct_pi, data = cmvv_avg100k)
-
-all_state3 <- tidy(all_state3)
-
-
-all_state4 <- lm(retail_rec_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop + pct_black + pct_hisp + pct_asian + pct_native + pct_pi, data = cmvv_avg100k)
-
-all_state4 <- tidy(all_state4)
-
-
-all_state5 <- lm(retail_rec_pctchange~national_risk_group + state_risk_group + county_risk_group + svi_fac + cvac_fac + per_gop + maj_minority, data = cmvv_avg100k)
-
-all_state5 <- tidy(all_state5)
-
-all_state6 <- lm(retail_rec_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + maj_minority, data = cmvv_avg100k)
-
-all_state6 <- tidy(all_state6)
-
-
-
-all_state7 <- lm(retail_rec_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop +`Estimated hesitant` + maj_minority, data = cmvv_avg100k)
-
-all_state7 <- tidy(all_state7)
-
-all_state8 <- lm(retail_rec_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = cmvv_avg100k)
-
-all_state8 <- tidy(all_state8)
-
-```
-
-
-
-
 # debug 2
 ```{r}
 
@@ -112,33 +68,53 @@ for (s in sn) {
   temp_df$sub_region_1
   
   c_name <- paste("coeff", s, sep = "_")
-  print(c_name)
   p_name <- paste("pval", s, sep = "_")
-  print(p_name)
-  
+
   temp_reg <- lm(retail_rec_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = temp_df)
   
   temp_reg <- tidy(temp_reg)
   
-  state_results[[c_name]] <- temp_reg$estimate
-  state_results[[p_name]] <- temp_reg$p.value
+  rr_state_results[[c_name]] <- temp_reg$estimate
+  rr_state_results[[p_name]] <- temp_reg$p.value
   #state_results <- state_results %>% mutate(c_name = temp_reg$estimate, p_name <-temp_reg$p.value)
   
   
 }
 
-cmvv_avg100k %>% filter(sub_region_1=="Arizona")
 
-cm_vax_vote %>% filter(sub_region_1=="New Mexico")
 ```
 # pivoting df
 
 ```{r}
-rr_long_state_results <- state_results %>% pivot_longer(cols = c(coeff_Alabama:pval_Wyoming), names_to = c("est_pval", "state"), names_sep = "_")
+rr_long_state_results <- rr_state_results %>% pivot_longer(cols = c(coeff_Alabama:pval_Wyoming), names_to = c("est_pval", "state"), names_sep = "_")
 
-rr_wide_state_results <- long_state_results %>% pivot_wider(names_from = term, values_from = value)
+rr_wide_state_results <- rr_long_state_results %>% pivot_wider(names_from = term, values_from = value)
 
-rr_state_coeffs <- wide_state_results %>% filter(est_pval=="coeff")
+rr_state_coeffs <- rr_wide_state_results %>% filter(est_pval=="coeff")
+```
+
+
+```{r}
+rr_state_coeffs <- rr_state_coeffs %>% mutate(
+  nat_pctile = ntile(national_risk_group, 5),
+  st_pctile = ntile(state_risk_group, 5),
+  co_pctile = ntile(county_risk_group, 5),
+  
+  nat_pctile = factor(nat_pctile, levels = c(1:5), labels = c("20%", "40%", "60%", "80%", "100%"), ordered = TRUE),
+  st_pctile = factor(st_pctile, levels = c(1:5), labels = c("20%", "40%", "60%", "80%", "100%"), ordered = TRUE),
+  co_pctile = factor(co_pctile, levels = c(1:5), labels = c("20%", "40%", "60%", "80%", "100%"), ordered = TRUE),
+  
+  nat_pos = ifelse(national_risk_group>=0,1,0),
+  st_pos = ifelse(state_risk_group>=0,1,0),
+  co_pos = ifelse(state_risk_group>=0,1,0),
+  
+  nat_pos = factor(nat_pos, levels=c(0:1), labels = c("-", "+"), ordered = TRUE),
+  
+  st_pos = factor(st_pos, levels=c(0:1), labels = c("-", "+"), ordered = TRUE),
+  
+  co_pos = factor(co_pos, levels=c(0:1), labels = c("-", "+"), ordered = TRUE)
+  
+)
 ```
 
 
@@ -151,7 +127,7 @@ rr_state_coeffs <- left_join(rr_state_coeffs, statename)
 
 rr_state_coeffs <- rr_state_coeffs %>% rename(intercept = `(Intercept)`)
 
-rr_state_geo_coeffs <- right_join(census_spatial, state_coeffs, by = c("GEOID"="sfips"))
+rr_state_geo_coeffs <- right_join(census_spatial, rr_state_coeffs, by = c("GEOID"="sfips"))
 ```
 
 # geospatial charts -- intercept
@@ -173,4 +149,21 @@ rr_state_geo_coeffs %>%  ggplot() +
 rr_state_geo_coeffs %>%  ggplot() + 
   geom_sf(mapping = aes(fill = county_risk_group)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "RR- Responsiveness to County Level Cases")
 ```
+# Mapping with Ntile
+# Scaling with Ntile to avoid outlier skew
 
+note_ the challenge is when the skew is positive for some and negative for others. maybe make that a color param?
+
+
+
+```{r}
+rr_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = nat_pctile, color = nat_pos)) + scale_fill_brewer(palette = "YlOrRd", name = "Average Traffic Change") + scale_color_manual(values = c("black", "white")) + labs(title = "RR - Responsiveness to National Level Cases")
+
+
+rr_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = st_pctile, color = st_pos)) + scale_fill_brewer(palette = "YlOrRd", name = "Average Traffic Change") + scale_color_manual(values = c("black", "white")) + labs(title = "RR - Responsiveness to State Level Cases")
+
+rr_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = co_pctile, color = co_pos)) + scale_fill_brewer(palette = "YlOrRd", name = "Average Traffic Change") + scale_color_manual(values = c("black", "white")) + labs(title = "RR - Responsiveness to County Level Cases")
+```
