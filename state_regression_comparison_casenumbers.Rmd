@@ -303,6 +303,10 @@ gp_state_geo_coeffs %>%  ggplot() +
 
 ```{r}
 
+us_outliers<-boxplot(gp_state_coeffs$us_cases_avg_per_100k)$out
+st_outliers<-boxplot(gp_state_coeffs$st_cases_avg_per_100k)$out
+co_outliers<-boxplot(gp_state_coeffs$co_cases_avg_per_100k)$out
+
 gp_cplot_rmout <- gp_state_geo_coeffs %>% filter(!(co_cases_avg_per_100k %in% co_outliers)) %>% ggplot() + geom_sf(mapping = aes(fill = co_cases_avg_per_100k)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "GP - Responsiveness to County Level Cases")
 
 co_out_pos <- co_outliers>=0
@@ -361,6 +365,8 @@ gp_nplot_rmout + gp_nplot_out_pos + gp_nplot_out_neg
 
 ```{r}
 gp_coeff_diffs <- gp_state_coeffs %>% select(state, intercept:co_cases_avg_per_100k) %>% mutate(nat_state = us_cases_avg_per_100k - st_cases_avg_per_100k, nat_co = us_cases_avg_per_100k - co_cases_avg_per_100k, st_co = st_cases_avg_per_100k - co_cases_avg_per_100k)
+
+gp_coeff_diffs %>% summarise(nat_mean = mean(us_cases_avg_per_100k), state_mean = mean(st_cases_avg_per_100k), county_mean = mean(co_cases_avg_per_100k))
   
 gp_coeff_diffs %>% select(state, us_cases_avg_per_100k, st_cases_avg_per_100k, nat_state)
 ```

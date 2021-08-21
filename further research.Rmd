@@ -125,15 +125,24 @@ co20_mob <- mobility_2020 %>% filter(sub_region_1 != "", sub_region_2!="")
 
 ```
 
+```{r}
+st20_mob <- left_join(st20_mob, statename, by = c("sub_region_1" = "state"))
+
+st21_mob <- left_join(st21_mob, statename, by = c("sub_region_1" = "state"))
+
+st_mob <- left_join(st_mob, statename, by = c("sub_region_1" = "state"))
+
+```
+
 
 
 ```{r}
-us21_mob <- mobility_2021 %>% filter(sub_region_1 == "")
+#us21_mob <- mobility_2021 %>% filter(sub_region_1 == "")
 
 
-st21_mob <- mobility_2021 %>% filter(sub_region_1 != "", sub_region_2=="")  %>% distinct(sub_region_1, date, .keep_all = TRUE)
+#st21_mob <- mobility_2021 %>% filter(sub_region_1 != "", sub_region_2=="")  %>% distinct(sub_region_1, date, .keep_all = TRUE)
 
-co21_mob <- mobility_2021 %>% filter(sub_region_1 != "", sub_region_2!="")
+#co21_mob <- mobility_2021 %>% filter(sub_region_1 != "", sub_region_2!="")
 
 #grouped
 
@@ -147,14 +156,6 @@ co_mob <- bind_rows(co20_mob, co21_mob)
 
 
 
-```{r}
-st20_mob <- left_join(st20_mob, statename, by = c("sub_region_1" = "state"))
-
-st21_mob <- left_join(st21_mob, statename, by = c("sub_region_1" = "state"))
-
-st_mob <- left_join(st_mob, statename, by = c("sub_region_1" = "state"))
-
-```
 
 
 # Census
@@ -340,7 +341,7 @@ relevant factors: is an order in place? is a mask mandate in place? is it summer
 
 ```{r}
 
-grocery_pharma <- county_cm %>% select(sub_region_1: date, grocery_and_pharmacy_percent_change_from_baseline, co_cases:us_deaths_avg_per_100k) %>% filter(!is.na(grocery_and_pharmacy_percent_change_from_baseline), month(date)>=6 | year(date)==2021)
+grocery_pharma <- county_cm %>% select(sub_region_1: date, grocery_and_pharmacy_percent_change_from_baseline, co_cases:county_risk_group) %>% filter(!is.na(grocery_and_pharmacy_percent_change_from_baseline), month(date)>=6 | year(date)==2021)
 
 
 #examine randomness of NA for grocery and pharma later--double check it isnt a merge issue
@@ -402,7 +403,7 @@ gp_nsc_risk_group <- tidy(gp_nsc_risk_group)
 
 # retail and rec
 ```{r}
-retail_rec <- test_narm %>% select(sub_region_1: date, retail_and_recreation_percent_change_from_baseline, co_cases:us_deaths_avg_per_100k) %>% filter(!is.na(retail_and_recreation_percent_change_from_baseline), month(date)>=6 | year(date)==2021)
+retail_rec <- county_cm %>% select(sub_region_1: date, retail_and_recreation_percent_change_from_baseline, co_cases:county_risk_group) %>% filter(!is.na(retail_and_recreation_percent_change_from_baseline), month(date)>=6 | year(date)==2021)
 
 
 rr_nat_only <- lm(retail_and_recreation_percent_change_from_baseline ~ us_cases_avg_per_100k, data = retail_rec)
