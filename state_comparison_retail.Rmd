@@ -58,6 +58,9 @@ sn <- statename %>% filter(state %in% cmvv_avg100k$sub_region_1, state!="Alaska"
 
 sn <- sn$state
 
+rr_adjrsq <- numeric(0)
+
+
 #missingness with alaska
 #sn <- sort(sn) %>% filter(sn %in% cmvv_avg100k$sub_region_1)
 
@@ -71,6 +74,12 @@ for (s in sn) {
   p_name <- paste("pval", s, sep = "_")
 
   temp_reg <- lm(retail_rec_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = temp_df)
+  #adding in rsq
+  
+  temp_rsq <- summary(temp_reg)$adj.r.squared
+  
+  #print(temp_rsq)
+  rr_adjrsq <-c(rr_adjrsq, temp_rsq)
   
   temp_reg <- tidy(temp_reg)
   
@@ -94,28 +103,9 @@ rr_state_coeffs <- rr_wide_state_results %>% filter(est_pval=="coeff")
 ```
 
 
-```{r}
-rr_state_coeffs <- rr_state_coeffs %>% mutate(
-  nat_pctile = ntile(national_risk_group, 5),
-  st_pctile = ntile(state_risk_group, 5),
-  co_pctile = ntile(county_risk_group, 5),
-  
-  nat_pctile = factor(nat_pctile, levels = c(1:5), labels = c("20%", "40%", "60%", "80%", "100%"), ordered = TRUE),
-  st_pctile = factor(st_pctile, levels = c(1:5), labels = c("20%", "40%", "60%", "80%", "100%"), ordered = TRUE),
-  co_pctile = factor(co_pctile, levels = c(1:5), labels = c("20%", "40%", "60%", "80%", "100%"), ordered = TRUE),
-  
-  nat_pos = ifelse(national_risk_group>=0,1,0),
-  st_pos = ifelse(state_risk_group>=0,1,0),
-  co_pos = ifelse(state_risk_group>=0,1,0),
-  
-  nat_pos = factor(nat_pos, levels=c(0:1), labels = c("-", "+"), ordered = TRUE),
-  
-  st_pos = factor(st_pos, levels=c(0:1), labels = c("-", "+"), ordered = TRUE),
-  
-  co_pos = factor(co_pos, levels=c(0:1), labels = c("-", "+"), ordered = TRUE)
-  
-)
-```
+taking out ntile methodology in favor of outlier methodology
+
+
 
 
 #rejoining geospatial data
@@ -128,6 +118,14 @@ rr_state_coeffs <- left_join(rr_state_coeffs, statename)
 rr_state_coeffs <- rr_state_coeffs %>% rename(intercept = `(Intercept)`)
 
 rr_state_geo_coeffs <- right_join(census_spatial, rr_state_coeffs, by = c("GEOID"="sfips"))
+
+rr_state_adjrsq <- data_frame(
+  state = sn,
+  adj.r.squared = rr_adjrsq
+  
+)
+
+rr_state_geo_coeffs <- left_join(rr_state_geo_coeffs, rr_state_adjrsq, by = "state")
 ```
 
 # geospatial charts -- intercept
@@ -149,21 +147,71 @@ rr_state_geo_coeffs %>%  ggplot() +
 rr_state_geo_coeffs %>%  ggplot() + 
   geom_sf(mapping = aes(fill = county_risk_group)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "RR- Responsiveness to County Level Cases")
 ```
-# Mapping with Ntile
-# Scaling with Ntile to avoid outlier skew
-
-note_ the challenge is when the skew is positive for some and negative for others. maybe make that a color param?
 
 
 
+# outliers methodology
+
+more effective than ntile
+note: define regression in the thingie
 ```{r}
-rr_state_geo_coeffs %>%  ggplot() + 
-  geom_sf(mapping = aes(fill = nat_pctile, color = nat_pos)) + scale_fill_brewer(palette = "YlOrRd", name = "Average Traffic Change") + scale_color_manual(values = c("black", "white")) + labs(title = "RR - Responsiveness to National Level Cases")
+us_outliers<-boxplot(rr_state_coeffs$national_risk_group)$out
+st_outliers<-boxplot(rr_state_coeffs$state_risk_group)$out
+co_outliers<-boxplot(rr_state_coeffs$county_risk_group)$out
+
+rr_cplot_rmout <- rr_state_geo_coeffs %>% filter(!(county_risk_group %in% co_outliers)) %>% ggplot() + geom_sf(mapping = aes(fill = county_risk_group)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "RR - Responsiveness to County Level Cases")
+
+co_out_pos <- co_outliers>=0
+
+co_out_neg<- co_outliers<0
+
+co_outliers[co_out_pos]
+co_outliers[co_out_neg]
+rr_cplot_out_pos <- rr_state_geo_coeffs %>% filter(county_risk_group %in% co_outliers[co_out_pos]) %>%  geom_sf(mapping = aes(), fill = "white")
+
+rr_cplot_out_neg <- rr_state_geo_coeffs %>% filter(county_risk_group %in% co_outliers[co_out_neg]) %>%  geom_sf(mapping = aes(), fill = "purple")
 
 
-rr_state_geo_coeffs %>%  ggplot() + 
-  geom_sf(mapping = aes(fill = st_pctile, color = st_pos)) + scale_fill_brewer(palette = "YlOrRd", name = "Average Traffic Change") + scale_color_manual(values = c("black", "white")) + labs(title = "RR - Responsiveness to State Level Cases")
+rr_cplot_rmout + rr_cplot_out_pos + rr_cplot_out_neg
 
-rr_state_geo_coeffs %>%  ggplot() + 
-  geom_sf(mapping = aes(fill = co_pctile, color = co_pos)) + scale_fill_brewer(palette = "YlOrRd", name = "Average Traffic Change") + scale_color_manual(values = c("black", "white")) + labs(title = "RR - Responsiveness to County Level Cases")
 ```
+```{r}
+rr_splot_rmout <- rr_state_geo_coeffs %>% filter(!(state_risk_group %in% st_outliers)) %>% ggplot() + geom_sf(mapping = aes(fill = state_risk_group)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "rr - Responsiveness to State Level Cases")
+
+st_out_pos <- st_outliers>=0
+
+st_out_neg<- st_outliers<0
+
+st_outliers[st_out_pos]
+st_outliers[st_out_neg]
+
+
+rr_splot_out_pos <- rr_state_geo_coeffs %>% filter(state_risk_group %in% st_outliers[st_out_pos]) %>%  geom_sf(mapping = aes(), fill = "pink")
+
+rr_splot_out_neg <- rr_state_geo_coeffs %>% filter(state_risk_group %in% st_outliers[st_out_neg]) %>%  geom_sf(mapping = aes(), fill = "purple")
+
+
+rr_splot_rmout + rr_splot_out_pos + rr_splot_out_neg
+```
+```{r}
+rr_nplot_rmout <- rr_state_geo_coeffs %>% filter(!(national_risk_group %in% us_outliers)) %>% ggplot() + geom_sf(mapping = aes(fill = national_risk_group)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "rr - Responsiveness to National Level Cases")
+
+us_out_pos <- us_outliers>=0
+
+us_out_neg<- us_outliers<0
+
+us_outliers[us_out_pos]
+us_outliers[us_out_neg]
+
+
+rr_nplot_out_pos <- rr_state_geo_coeffs %>% filter(national_risk_group %in% us_outliers[us_out_pos]) %>%  geom_sf(mapping = aes(), fill = "pink")
+
+rr_nplot_out_neg <- rr_state_geo_coeffs %>% filter(national_risk_group %in% us_outliers[us_out_neg]) %>%  geom_sf(mapping = aes(), fill = "purple")
+
+
+rr_nplot_rmout + rr_nplot_out_pos + rr_nplot_out_neg
+```
+
+
+
+# # charts with equal scale

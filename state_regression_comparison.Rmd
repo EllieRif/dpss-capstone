@@ -13,19 +13,6 @@ This is an R Markdown document. Markdown is a simple formatting syntax for autho
 
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
-```{r cars}
-summary(cars)
-```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
 
 
 Goal: a SUPER cool visualization to try would be if i used a for loop to run regressions for every state and then used that as its own DF for geospatial data. I could totally do it
@@ -40,152 +27,260 @@ library(broom)
 library(lubridate)
 ```
 
-# # Steps to visualization - Grocery Pharma
+# # Case Numbers
+What regressions do I want to run?
 
-# clean colnames
+cases -> only national (factored and unfactored)
+
+cases -> only state (factored and unfactored)
+
+cases -> only county (factored and unfactored)
+
+cases -> all three together
+
+controls:
+svi - factored and unfactored
+cvac - factored and unfactored
+per_gop
+race
+gop_win
+Majority minority
+
+I should definitely write a function here
+ we need to simplify
+ 
+ all three factored
+ 
+ all three unfactored
+ 
+ gop
+ svi
+ cvac
+ race
+
+
+# All State
+
 
 ```{r}
-cmvv_avg100k <- cmvv_avg100k %>% rename(
-  svi = `Social Vulnerability Index (SVI)`,
-  svi_cat = `SVI Category`,
-cvac =  `Ability to handle a COVID-19 outbreak (CVAC)`,
-  cvac_cat = `CVAC Category`,
-  retail_rec_pctchange = retail_and_recreation_percent_change_from_baseline,
-  grocery_pharma_pctchange = grocery_and_pharmacy_percent_change_from_baseline,
-  parks_pctchange = parks_percent_change_from_baseline,
-  transit_pctchange = transit_stations_percent_change_from_baseline ,
-  work_pctchange = workplaces_percent_change_from_baseline,
-  residential_pctchange = residential_percent_change_from_baseline,
-  pct_hisp = `Percent Hispanic`,
-  pct_native = `Percent non-Hispanic American Indian/Alaska Native`,
-   pct_asian = `Percent non-Hispanic Asian`,
-pct_black = `Percent non-Hispanic Black`,
-  pct_pi =`Percent non-Hispanic Native Hawaiian/Pacific Islander`,
-   pct_white = `Percent non-Hispanic White`
+
+
+
+#define function all state cases as opposed to by state cases
+
+all_state_cases <- function(dep_var) {
+ # create a df with single var that includes variable names for any regressions I'd run
   
-)
+  
+  full_reg <- lm(dep_var~us_cases_avg_per_100k + st_cases_avg_per_100k + co_cases_avg_per_100k + `Estimated hesitant`* per_gop + svi + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = cmvv_avg100k)
 
-cmvv_avg100k <- cmvv_avg100k %>% mutate(holiday = ifelse(month(date)==11 | month(date)==12, 1, 0))
+  full_reg = tidy(full_reg)
+  
+  rgrsrs <- data.frame(
+    
+    term = full_reg$term
+  )
+  
+# rgrsrs <- data.frame(
+#   term = c(colnames(cmvv_avg100k)[11:16], colnames(cmvv_avg100k)[21],colnames(cmvv_avg100k)[24], colnames(cmvv_avg100k)[26], colnames(cmvv_avg100k)[31:35], colnames(cmvv_avg100k)[41]), "per_gop:`Estimated hesitant`") 
+
+#dep_var <- cmvv_avg100k[[dep_var]]
+
+
+  # regress only national cases(factored and unfactored)
+
+
+reg1 <- lm(dep_var~us_cases_avg_per_100k, data = cmvv_avg100k)
+
+reg1 <- tidy(reg1)
+
+colnames(reg1)[2:5] <- paste("reg1", colnames(reg1)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg1, by ="term")
+
+
+#state only
+reg2 <- lm(dep_var~st_cases_avg_per_100k, data = cmvv_avg100k)
+
+reg2 <- tidy(reg2)
+
+colnames(reg2)[2:5] <- paste("reg2", colnames(reg2)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg2, by ="term")
+
+
+#county only
+reg3 <- lm(dep_var~co_cases_avg_per_100k, data = cmvv_avg100k)
+
+reg3 <- tidy(reg3)
+
+colnames(reg3)[2:5] <- paste("reg3", colnames(reg3)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg3, by ="term")
+
+#all three
+
+reg4 <- lm(dep_var~us_cases_avg_per_100k + st_cases_avg_per_100k + co_cases_avg_per_100k, data = cmvv_avg100k)
+
+reg4 <- tidy(reg4)
+
+colnames(reg4)[2:5] <- paste("reg4", colnames(reg4)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg4, by ="term")
+
+#add in GOP
+
+reg5 <- lm(dep_var~us_cases_avg_per_100k + st_cases_avg_per_100k + co_cases_avg_per_100k + per_gop, data = cmvv_avg100k)
+
+reg5 <- tidy(reg5)
+
+colnames(reg5)[2:5] <- paste("reg5", colnames(reg5)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg5, by ="term")
+
+
+
+# add in SVI
+
+reg6 <- lm(dep_var~us_cases_avg_per_100k + st_cases_avg_per_100k + co_cases_avg_per_100k + per_gop + svi, data = cmvv_avg100k)
+
+reg6 <- tidy(reg6)
+
+colnames(reg6)[2:5] <- paste("reg6", colnames(reg6)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg6, by ="term")
+
+
+#adding in race
+
+reg7 <- lm(dep_var~us_cases_avg_per_100k + st_cases_avg_per_100k + co_cases_avg_per_100k + per_gop + svi + pct_black + pct_hisp + pct_asian + pct_native + pct_pi, data = cmvv_avg100k)
+
+reg7 <- tidy(reg7)
+
+colnames(reg7)[2:5] <- paste("reg7", colnames(reg7)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg7, by ="term")
+
+
+
+reg8 <- lm(dep_var~us_cases_avg_per_100k + st_cases_avg_per_100k + co_cases_avg_per_100k + per_gop + svi + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = cmvv_avg100k)
+
+reg8 <- tidy(reg8)
+
+colnames(reg8)[2:5] <- paste("reg8", colnames(reg8)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg8, by ="term")
+
+# add estimated hesitant and interaction term
+
+reg9 <- lm(dep_var~us_cases_avg_per_100k + st_cases_avg_per_100k + co_cases_avg_per_100k + `Estimated hesitant`* per_gop + svi + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = cmvv_avg100k)
+
+reg9 <- tidy(reg9)
+
+colnames(reg9)[2:5] <- paste("reg9", colnames(reg9)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg9, by ="term")
+
+return(rgrsrs)
+
+}
+
+
 ```
 
 
-# Develop regression for all states
-
-```{r}
-all_state1 <- lm(grocery_pharma_pctchange ~national_risk_group + state_risk_group + county_risk_group, data = cmvv_avg100k)
-
-all_state1 <- tidy(all_state1)
-
-all_state2 <- lm(grocery_pharma_pctchange ~ national_risk_group + state_risk_group + county_risk_group + svi + per_gop, data = cmvv_avg100k)
-
-all_state2 <- tidy(all_state2)
-
-all_state3 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + per_gop + pct_black + pct_hisp + pct_asian + pct_native + pct_pi, data = cmvv_avg100k)
-
-all_state3 <- tidy(all_state3)
-
-
-all_state4 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop + pct_black + pct_hisp + pct_asian + pct_native + pct_pi, data = cmvv_avg100k)
-
-all_state4 <- tidy(all_state4)
-
-
-all_state5 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi_fac + cvac_fac + per_gop + maj_minority, data = cmvv_avg100k)
-
-all_state5 <- tidy(all_state5)
-
-all_state6 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + maj_minority, data = cmvv_avg100k)
-
-all_state6 <- tidy(all_state6)
 
 
 
-all_state7 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop +`Estimated hesitant` + maj_minority, data = cmvv_avg100k)
 
-all_state7 <- tidy(all_state7)
-
-all_state8 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = cmvv_avg100k)
-
-all_state8 <- tidy(all_state8)
-
-```
-
-
-# create DF and for loop
+# by state
 
 ```{r}
 
 
-gp_state_results <- data.frame(
-  term = all_state8$term
-)
+by_state_cases <- function(dep_var) {
+  
+  full_reg <- lm(dep_var~us_cases_avg_per_100k + st_cases_avg_per_100k + co_cases_avg_per_100k + `Estimated hesitant`* per_gop + svi + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = cmvv_avg100k)
+  
+  full_reg = tidy(full_reg)
+  
+  rgrsrs <- data.frame(
+    
+    term = full_reg$term
+  )
+  
+
+  # rgrsrs <- data.frame(
+  # ind_vars = c(colnames(cmvv_avg100k)[11:13], colnames(cmvv_avg100k)[21], colnames(cmvv_avg100k)[24], colnames(cmvv_avg100k)[26], colnames(cmvv_avg100k)[31:35], colnames(cmvv_avg100k)[41], "per_gop:`Estimated hesitant`"))
+
+
+
 
 sn <- statename %>% filter(state %in% cmvv_avg100k$sub_region_1, state!="Alaska", state!="Hawaii") %>% arrange(state)
 
 sn <- sn$state
 
+#print(rgrsrs$ind_vars[1:15])
+
+#print(rgrsrs$ind_vars)
+
 #missingness with alaska
 #sn <- sort(sn) %>% filter(sn %in% cmvv_avg100k$sub_region_1)
 
 for (s in sn) {
-  temp_df <- cmvv_avg100k %>% filter(sub_region_1==s) %>% select(grocery_pharma_pctchange, national_risk_group, state_risk_group, county_risk_group, svi, cvac, per_gop, `Estimated hesitant`, pct_black, pct_hisp, pct_asian, pct_native, pct_pi, holiday) %>% drop_na()
+  
+  dep_df <-data.frame(
+    dep_var = c(dep_var)
+    
+  )
+  
+  temp_df <- bind_cols(cmvv_avg100k, dep_df)
+  
+  #print(colnames(temp_df))
+  
+  temp_df <- temp_df %>% filter(sub_region_1==s) %>% select(dep_var, 11:13, 21,24,26,31:35,41) %>% drop_na()
   #print(s)
   
-  temp_df$sub_region_1
+  #new_dep <- temp_df[[dep_var]]
+  
+  #print(dep_var)
+  
+  #temp_df$sub_region_1
   
   c_name <- paste("coeff", s, sep = "_")
   p_name <- paste("pval", s, sep = "_")
+  print(c_name)
   
-  temp_reg <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = temp_df)
+  temp_reg <- lm(dep_var~us_cases_avg_per_100k + st_cases_avg_per_100k + co_cases_avg_per_100k + `Estimated hesitant`* per_gop + svi + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = temp_df)
   
   temp_reg <- tidy(temp_reg)
   
-  gp_state_results[[c_name]] <- temp_reg$estimate
-  gp_state_results[[p_name]] <- temp_reg$p.value
+  rgrsrs[[c_name]] <- temp_reg$estimate
+  rgrsrs[[p_name]] <- temp_reg$p.value
   #state_results <- state_results %>% mutate(c_name = temp_reg$estimate, p_name <-temp_reg$p.value)
   
   
 }
 
+long_results <- rgrsrs %>%  pivot_longer(cols = c(coeff_Alabama:pval_Wyoming), names_to = c("est_pval", "state"), names_sep = "_")
+
+wide_results <- long_results %>% pivot_wider(names_from = term, values_from = value)
+
+return(wide_results)
+}
 
 ```
-# pivoting df
 
-```{r}
-gp_long_state_results <- gp_state_results %>% pivot_longer(cols = c(coeff_Alabama:pval_Wyoming), names_to = c("est_pval", "state"), names_sep = "_")
 
-gp_wide_state_results <- gp_long_state_results %>% pivot_wider(names_from = term, values_from = value)
 
-gp_state_coeffs <- gp_wide_state_results %>% filter(est_pval=="coeff")
-```
-adding mutations now so they are included in future merges
-```{r}
-gp_state_coeffs <- gp_state_coeffs %>% mutate(
-  nat_pctile = ntile(national_risk_group, 5),
-  st_pctile = ntile(state_risk_group, 5),
-  co_pctile = ntile(county_risk_group, 5),
-  
-  nat_pctile = factor(nat_pctile, levels = c(1:5), labels = c("20%", "40%", "60%", "80%", "100%"), ordered = TRUE),
-  st_pctile = factor(st_pctile, levels = c(1:5), labels = c("20%", "40%", "60%", "80%", "100%"), ordered = TRUE),
-  co_pctile = factor(co_pctile, levels = c(1:5), labels = c("20%", "40%", "60%", "80%", "100%"), ordered = TRUE),
-  
-  nat_pos = ifelse(national_risk_group>=0,1,0),
-  st_pos = ifelse(state_risk_group>=0,1,0),
-  co_pos = ifelse(state_risk_group>=0,1,0),
-  
-  nat_pos = factor(nat_pos, levels=c(0:1), labels = c("-", "+"), ordered = TRUE),
-  
-  st_pos = factor(st_pos, levels=c(0:1), labels = c("-", "+"), ordered = TRUE),
-  
-  co_pos = factor(co_pos, levels=c(0:1), labels = c("-", "+"), ordered = TRUE)
-  
-)
-```
+
+
 
 #rejoining geospatial data
 
 ```{r}
 # adding fips back in
+#have to limit to just coeffs first
 
 gp_state_coeffs <- left_join(gp_state_coeffs, statename)
 
@@ -194,38 +289,216 @@ gp_state_coeffs <- gp_state_coeffs %>% rename(intercept = `(Intercept)`)
 gp_state_geo_coeffs <- right_join(census_spatial, gp_state_coeffs, by = c("GEOID"="sfips"))
 ```
 
-# geospatial charts -- intercept
 
 ```{r}
-gp_state_geo_coeffs %>%  ggplot() + 
-  geom_sf(mapping = aes(fill = intercept/100)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change")
+x <- cmvv_avg100k$grocery_pharma_pctchange
 ```
-```{r}
-gp_state_geo_coeffs %>%  ggplot() + 
-  geom_sf(mapping = aes(fill = national_risk_group)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "GP - Responsiveness to National Level Cases")
 
 
-gp_state_geo_coeffs %>%  ggplot() + 
-  geom_sf(mapping = aes(fill = state_risk_group)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "GP - Responsiveness to State Level Cases")
+# # risk groups
 
-gp_state_geo_coeffs %>%  ggplot() + 
-  geom_sf(mapping = aes(fill = county_risk_group)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "GP - Responsiveness to County Level Cases")
-```
-# Scaling with Ntile to avoid outlier skew
-
-note_ the challenge is when the skew is positive for some and negative for others. maybe make that a color param?
-
-
+#all state
 
 ```{r}
-gp_state_geo_coeffs %>%  ggplot() + 
-  geom_sf(mapping = aes(fill = nat_pctile, color = nat_pos)) + scale_fill_brewer(palette = "YlOrRd", name = "Average Traffic Change") + scale_color_manual(values = c("black", "white")) + labs(title = "GP - Responsiveness to National Level Cases")
 
 
-gp_state_geo_coeffs %>%  ggplot() + 
-  geom_sf(mapping = aes(fill = st_pctile, color = st_pos)) + scale_fill_brewer(palette = "YlOrRd", name = "Average Traffic Change") + scale_color_manual(values = c("black", "white")) + labs(title = "GP - Responsiveness to State Level Cases")
 
-gp_state_geo_coeffs %>%  ggplot() + 
-  geom_sf(mapping = aes(fill = co_pctile, color = co_pos)) + scale_fill_brewer(palette = "YlOrRd", name = "Average Traffic Change") + scale_color_manual(values = c("black", "white")) + labs(title = "GP - Responsiveness to County Level Cases")
+#define function all state cases as opposed to by state cases
+
+all_state_risk <- function(dep_var) {
+ # create a df with single var that includes variable names for any regressions I'd run
+  
+  
+  full_reg <- lm(dep_var~national_risk_group + state_risk_group + county_risk_group + `Estimated hesitant`* per_gop + svi + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = cmvv_avg100k)
+
+  full_reg = tidy(full_reg)
+  
+  rgrsrs <- data.frame(
+    
+    term = full_reg$term
+  )
+  
+# rgrsrs <- data.frame(
+#   term = c(colnames(cmvv_avg100k)[11:16], colnames(cmvv_avg100k)[21],colnames(cmvv_avg100k)[24], colnames(cmvv_avg100k)[26], colnames(cmvv_avg100k)[31:35], colnames(cmvv_avg100k)[41]), "per_gop:`Estimated hesitant`") 
+
+#dep_var <- cmvv_avg100k[[dep_var]]
+
+
+  # regress only national cases(factored and unfactored)
+
+
+reg1 <- lm(dep_var~national_risk_group, data = cmvv_avg100k)
+
+reg1 <- tidy(reg1)
+
+colnames(reg1)[2:5] <- paste("reg1", colnames(reg1)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg1, by ="term")
+
+
+#state only
+reg2 <- lm(dep_var~state_risk_group, data = cmvv_avg100k)
+
+reg2 <- tidy(reg2)
+
+colnames(reg2)[2:5] <- paste("reg2", colnames(reg2)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg2, by ="term")
+
+
+#county only
+reg3 <- lm(dep_var~county_risk_group, data = cmvv_avg100k)
+
+reg3 <- tidy(reg3)
+
+colnames(reg3)[2:5] <- paste("reg3", colnames(reg3)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg3, by ="term")
+
+#all three
+
+reg4 <- lm(dep_var~national_risk_group + state_risk_group + county_risk_group, data = cmvv_avg100k)
+
+reg4 <- tidy(reg4)
+
+colnames(reg4)[2:5] <- paste("reg4", colnames(reg4)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg4, by ="term")
+
+#add in GOP
+
+reg5 <- lm(dep_var~national_risk_group + state_risk_group + county_risk_group + per_gop, data = cmvv_avg100k)
+
+reg5 <- tidy(reg5)
+
+colnames(reg5)[2:5] <- paste("reg5", colnames(reg5)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg5, by ="term")
+
+
+
+# add in SVI
+
+reg6 <- lm(dep_var~national_risk_group + state_risk_group + county_risk_group + per_gop + svi, data = cmvv_avg100k)
+
+reg6 <- tidy(reg6)
+
+colnames(reg6)[2:5] <- paste("reg6", colnames(reg6)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg6, by ="term")
+
+
+#adding in race
+
+reg7 <- lm(dep_var~national_risk_group + state_risk_group + county_risk_group + per_gop + svi + pct_black + pct_hisp + pct_asian + pct_native + pct_pi, data = cmvv_avg100k)
+
+reg7 <- tidy(reg7)
+
+colnames(reg7)[2:5] <- paste("reg7", colnames(reg7)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg7, by ="term")
+
+
+
+reg8 <- lm(dep_var~national_risk_group + state_risk_group + county_risk_group + per_gop + svi + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = cmvv_avg100k)
+
+reg8 <- tidy(reg8)
+
+colnames(reg8)[2:5] <- paste("reg8", colnames(reg8)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg8, by ="term")
+
+# add estimated hesitant and interaction term
+
+reg9 <- lm(dep_var~national_risk_group + state_risk_group + county_risk_group + `Estimated hesitant`* per_gop + svi + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = cmvv_avg100k)
+
+reg9 <- tidy(reg9)
+
+colnames(reg9)[2:5] <- paste("reg9", colnames(reg9)[2:5], sep = "")
+
+rgrsrs<-left_join(rgrsrs, reg9, by ="term")
+
+return(rgrsrs)
+
+}
+
+
 ```
 
+
+# by state
+
+```{r}
+
+
+by_state_risk <- function(dep_var) {
+  
+  full_reg <- lm(dep_var~national_risk_group + state_risk_group + county_risk_group + `Estimated hesitant`* per_gop + svi + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = cmvv_avg100k)
+  
+  full_reg = tidy(full_reg)
+  
+  rgrsrs <- data.frame(
+    
+    term = full_reg$term
+  )
+  
+
+  # rgrsrs <- data.frame(
+  # ind_vars = c(colnames(cmvv_avg100k)[11:13], colnames(cmvv_avg100k)[21], colnames(cmvv_avg100k)[24], colnames(cmvv_avg100k)[26], colnames(cmvv_avg100k)[31:35], colnames(cmvv_avg100k)[41], "per_gop:`Estimated hesitant`"))
+
+
+
+
+sn <- statename %>% filter(state %in% cmvv_avg100k$sub_region_1, state!="Alaska", state!="Hawaii") %>% arrange(state)
+
+sn <- sn$state
+
+#print(rgrsrs$ind_vars[1:15])
+
+#print(rgrsrs$ind_vars)
+
+#missingness with alaska
+#sn <- sort(sn) %>% filter(sn %in% cmvv_avg100k$sub_region_1)
+
+for (s in sn) {
+  
+  dep_df <-data.frame(
+    dep_var = c(dep_var)
+    
+  )
+  
+  temp_df <- bind_cols(cmvv_avg100k, dep_df)
+  
+  #print(colnames(temp_df))
+  
+  temp_df <- temp_df %>% filter(sub_region_1==s) %>% select(dep_var, 14:16, 21,24,26,31:35,41) %>% drop_na()
+  #print(s)
+  
+  #new_dep <- temp_df[[dep_var]]
+  
+  #print(dep_var)
+  
+  #temp_df$sub_region_1
+  
+  c_name <- paste("coeff", s, sep = "_")
+  p_name <- paste("pval", s, sep = "_")
+
+  temp_reg <- lm(dep_var~national_risk_group + state_risk_group + county_risk_group + `Estimated hesitant`* per_gop + svi + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = temp_df)
+  
+  temp_reg <- tidy(temp_reg)
+  
+  rgrsrs[[c_name]] <- temp_reg$estimate
+  rgrsrs[[p_name]] <- temp_reg$p.value
+  #state_results <- state_results %>% mutate(c_name = temp_reg$estimate, p_name <-temp_reg$p.value)
+  
+  
+}
+
+long_results <- rgrsrs %>%  pivot_longer(cols = c(coeff_Alabama:pval_Wyoming), names_to = c("est_pval", "state"), names_sep = "_")
+
+wide_results <- long_results %>% pivot_wider(names_from = term, values_from = value)
+
+return(wide_results)
+}
+
+```
