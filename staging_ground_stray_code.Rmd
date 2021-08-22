@@ -1,0 +1,268 @@
+---
+title: "code moving and staging"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+# # 2020 visualizations
+
+These will need editing based on new varnames
+
+# # Visualizations - 2020
+
+# Panic Shopping Period
+
+```{r}
+# struggling with this one because I'm not sure what to regress it on?
+#https://www.ncsolutions.com/covid/a-bulk-buying-tipping-point/
+
+us20_mob %>%  filter(month(date)==03) %>% ggplot() + geom_line(mapping = aes(y = retail_and_recreation_percent_change_from_baseline, x = date))
+
+us20_mob %>%  filter(month(date)==03) %>% ggplot() + geom_line(mapping = aes(y = grocery_and_pharmacy_percent_change_from_baseline, x = date))
+```
+# geospatial - panic buying
+```{r}
+
+extreme_buying <- st20_mob %>% filter(month(date)==3, day(date)>=10, day(date)<=13) %>% distinct(sfips, date, .keep_all = TRUE) %>% select(-sub_region_2, -metro_area, -census_fips_code, -iso_3166_2_code)
+
+#test_distinct <- mobility_2020_states %>% distinct(sfips, date, .keep_all = TRUE)
+  
+extreme_311 <- extreme_buying %>% group_by(sfips) %>%  filter(day(date)==11) 
+
+
+state_mobility_geo <- right_join(census_spatial, extreme_buying, by = c("GEOID"="sfips"))
+
+b_lims <- state_mobility_geo %>% st_bbox()
+
+state_mobility_geo %>% filter(day(date)==11) %>% ggplot() + 
+  geom_sf(mapping = aes(fill = grocery_and_pharmacy_percent_change_from_baseline)) + scale_fill_distiller(palette = "YlOrRd", name = "grocery") + xlim(-180,-25)
+
+
+state_mobility_geo %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = grocery_and_pharmacy_percent_change_from_baseline)) + scale_fill_distiller(palette = "YlOrRd", name = "grocery") + xlim(-180,-25) + facet_wrap(~date)
+```
+# Order Data
+
+Goals: compare during periods including and not including orders
+
+```{r}
+# yeah ok we're just gonna use my data, the county level/date listings overcomplicate it for what i need
+
+# can create a separate branch with that data later
+
+# goals: compare during periods including/not including orders
+```
+
+
+# # Initial regressions
+
+#grocery/pharma (more independent of orders than retail)
+regressing at county level grocery change with no additional controls, national only, state only, county only, and all three together
+
+```{r}
+
+grocery_pharma <- county_cm %>% select(sub_region_1: date, grocery_and_pharmacy_percent_change_from_baseline, co_cases:county_risk_group) %>% filter(!is.na(grocery_and_pharmacy_percent_change_from_baseline), month(date)>=6 | year(date)==2021)
+
+
+#examine randomness of NA for grocery and pharma later--double check it isnt a merge issue
+#filtering on date to mitigate against stay at home orders. plan to incorporate fully in future regressions
+
+grocery_pharma$grocery_and_pharmacy_percent_change_from_baseline<-as.double(grocery_pharma$grocery_and_pharmacy_percent_change_from_baseline)
+
+grocery_pharma %>% group_by(date) %>% summarise(c=sum(us_cases, na.rm=TRUE))
+
+gp_nat_only <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ us_cases_avg_per_100k, data = grocery_pharma)
+
+gp_nat_only <- tidy(gp_nat_only)
+
+gp_state_only <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ st_cases_avg_per_100k, data = grocery_pharma)
+
+gp_state_only <- tidy(gp_state_only)
+
+gp_county_only <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ co_cases_avg_per_100k, data = grocery_pharma)
+
+gp_county_only <- tidy(gp_county_only)
+
+gp_nsc <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ us_cases_avg_per_100k + st_cases_avg_per_100k + co_cases_avg_per_100k, data = grocery_pharma)
+
+gp_nsc <- tidy(gp_nsc)
+
+grocery_pharma %>% filter(is.na(grocery_and_pharmacy_percent_change_from_baseline))
+```
+
+cases from june to dec 2020 line chart
+
+```{r}
+
+
+grocery_pharma %>% filter(year(date)==2020) %>% group_by(date) %>% summarise(y = mean(us_cases_avg_per_100k)) %>%  ggplot() + 
+  geom_line(mapping=aes(x = date, y = y))
+grocery_pharma %>% group_by(date) %>% summarise(y = mean(us_cases_avg_per_100k)) %>%  ggplot() + 
+  geom_line(mapping=aes(x = date, y = y))
+
+
+
+```
+
+ditto on regs but with grouping
+
+```{r}
+gp_nat_risk_group <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ national_risk_group, data = grocery_pharma)
+
+gp_nat_risk_group <- tidy(gp_nat_risk_group)
+
+gp_st_risk_group <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ state_risk_group, data = grocery_pharma)
+
+gp_st_risk_group <- tidy(gp_st_risk_group)
+
+
+gp_co_risk_group <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ county_risk_group, data = grocery_pharma)
+
+gp_co_risk_group <- tidy(gp_co_risk_group)
+
+gp_nsc_risk_group <- lm(grocery_and_pharmacy_percent_change_from_baseline ~ national_risk_group + state_risk_group + county_risk_group, data = grocery_pharma)
+
+gp_nsc_risk_group <- tidy(gp_nsc_risk_group)
+```
+
+# retail and rec
+```{r}
+retail_rec <- county_cm %>% select(sub_region_1: date, retail_and_recreation_percent_change_from_baseline, co_cases:county_risk_group) %>% filter(!is.na(retail_and_recreation_percent_change_from_baseline), month(date)>=6 | year(date)==2021)
+
+
+rr_nat_only <- lm(retail_and_recreation_percent_change_from_baseline ~ us_cases_avg_per_100k, data = retail_rec)
+
+rr_st_only <- lm(retail_and_recreation_percent_change_from_baseline ~ st_cases_avg_per_100k, data = retail_rec)
+
+rr_co_only <- lm(retail_and_recreation_percent_change_from_baseline ~ co_cases_avg_per_100k, data = retail_rec)
+
+rr_nat_only <- tidy(rr_nat_only)
+
+rr_co_only <- tidy(rr_co_only)
+
+rr_st_only <- tidy(rr_st_only)
+
+```
+
+grouped risk levels
+
+```{r}
+rr_nat_risk_group <- lm(retail_and_recreation_percent_change_from_baseline ~ national_risk_group, data = retail_rec)
+
+rr_nat_risk_group <- tidy(rr_nat_risk_group)
+
+rr_st_risk_group <- lm(retail_and_recreation_percent_change_from_baseline ~ state_risk_group, data = retail_rec)
+
+rr_st_risk_group <- tidy(rr_st_risk_group)
+
+
+rr_co_risk_group <- lm(retail_and_recreation_percent_change_from_baseline ~ county_risk_group, data = retail_rec)
+
+rr_co_risk_group <- tidy(rr_co_risk_group)
+
+rr_nsc_risk_group <- lm(retail_and_recreation_percent_change_from_baseline ~ national_risk_group + state_risk_group + county_risk_group, data = retail_rec)
+
+rr_nsc_risk_group <- tidy(rr_nsc_risk_group)
+```
+
+
+
+# Develop regression for all states
+
+```{r}
+all_state1 <- lm(grocery_pharma_pctchange ~national_risk_group + state_risk_group + county_risk_group, data = cmvv_avg100k)
+
+all_state1 <- tidy(all_state1)
+
+all_state2 <- lm(grocery_pharma_pctchange ~ national_risk_group + state_risk_group + county_risk_group + svi + per_gop, data = cmvv_avg100k)
+
+all_state2 <- tidy(all_state2)
+
+all_state3 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + per_gop + pct_black + pct_hisp + pct_asian + pct_native + pct_pi, data = cmvv_avg100k)
+
+all_state3 <- tidy(all_state3)
+
+
+all_state4 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop + pct_black + pct_hisp + pct_asian + pct_native + pct_pi, data = cmvv_avg100k)
+
+all_state4 <- tidy(all_state4)
+
+
+all_state5 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi_fac + cvac_fac + per_gop + maj_minority, data = cmvv_avg100k)
+
+all_state5 <- tidy(all_state5)
+
+all_state6 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + maj_minority, data = cmvv_avg100k)
+
+all_state6 <- tidy(all_state6)
+
+
+
+all_state7 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop +`Estimated hesitant` + maj_minority, data = cmvv_avg100k)
+
+all_state7 <- tidy(all_state7)
+
+all_state8 <- lm(grocery_pharma_pctchange~national_risk_group + state_risk_group + county_risk_group + svi + cvac + per_gop*`Estimated hesitant` + pct_black + pct_hisp + pct_asian + pct_native + pct_pi + holiday, data = cmvv_avg100k)
+
+all_state8 <- tidy(all_state8)
+
+```
+# geospatial charts -- intercept
+
+```{r}
+gp_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = intercept/100)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change")
+```
+```{r}
+gp_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = national_risk_group)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "GP - Responsiveness to National Level Cases")
+
+
+gp_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = state_risk_group)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "GP - Responsiveness to State Level Cases")
+
+gp_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = county_risk_group)) + scale_fill_distiller(palette = "YlOrRd", name = "Average Traffic Change") + labs(title = "GP - Responsiveness to County Level Cases")
+```
+# Scaling with Ntile to avoid outlier skew
+
+note_ the challenge is when the skew is positive for some and negative for others. maybe make that a color param?
+
+
+
+```{r}
+gp_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = nat_pctile, color = nat_pos)) + scale_fill_brewer(palette = "YlOrRd", name = "Average Traffic Change") + scale_color_manual(values = c("black", "white")) + labs(title = "GP - Responsiveness to National Level Cases")
+
+
+gp_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = st_pctile, color = st_pos)) + scale_fill_brewer(palette = "YlOrRd", name = "Average Traffic Change") + scale_color_manual(values = c("black", "white")) + labs(title = "GP - Responsiveness to State Level Cases")
+
+gp_state_geo_coeffs %>%  ggplot() + 
+  geom_sf(mapping = aes(fill = co_pctile, color = co_pos)) + scale_fill_brewer(palette = "YlOrRd", name = "Average Traffic Change") + scale_color_manual(values = c("black", "white")) + labs(title = "GP - Responsiveness to County Level Cases")
+```
+
+
